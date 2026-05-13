@@ -28,7 +28,6 @@ const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Investments", href: "/dashboard/investments", icon: TrendingUp },
   { label: "Portfolio", href: "/dashboard/portfolio", icon: Wallet },
-  { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3 },
   {
     label: "Transactions",
     href: "/dashboard/transactions",
@@ -37,7 +36,6 @@ const NAV_ITEMS = [
 ];
 
 const SECONDARY_NAV = [
-  { label: "Verification", href: "/verification", icon: ShieldCheck },
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
   { label: "Help", href: "#", icon: HelpCircle },
 ];
@@ -251,7 +249,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
         }`}
       >
         {/* Top bar */}
-        <header className="flex h-16 items-center justify-between border-b border-zinc-200 bg-white/80 backdrop-blur-sm px-4 md:px-6">
+        <header className="flex z-50 h-16 items-center justify-between border-b border-zinc-200 bg-white/80 backdrop-blur-sm px-4 md:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 transition-colors md:hidden"

@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 import { ImageUpload } from "@/components/custom/ImageUpload";
+import { insertTransaction } from "@/hooks/insert-transaction";
+import BankDetailsDisplay from "@/components/custom/BankDetailsDisplay";
 
 // ─── MetaMap web-component type augmentation ──────────────────────────────────
 declare global {
@@ -85,6 +87,7 @@ interface FormValues {
   ppModeOfInterest: string;
   prMonthlyAmountFigures: string;
   prMonthlyAmountWords: string;
+  reifTenor: string;
   prTenor: string;
   prMonthlyPaymentDate: string;
   reifUnits: string;
@@ -299,6 +302,10 @@ const step3Schema = Yup.object({
     is: "premium",
     then: (s) => s.required("Monthly payment date is required"),
   }),
+  reifTenor: Yup.string().when("investmentPlan", {
+    is: "reif",
+    then: (s) => s.required("Tenor is required"),
+  }),
   reifUnits: Yup.string().when("investmentPlan", {
     is: "reif",
     then: (s) => s.required("Number of units is required"),
@@ -378,6 +385,49 @@ async function submitVerification(
       : Promise.resolve(""),
   ]);
 
+  // Build investment plan payload for transactions and profiles
+  const investmentPlanPayload: Record<string, unknown> = {
+    plan: values.investmentPlan,
+    ...(values.investmentPlan === "premium_plus" && {
+      investment_type: values.investmentPlan,
+      amount_figures: values.ppAmountFigures
+        ? Number(values.ppAmountFigures)
+        : null,
+      amount_words: values.ppAmountWords,
+      tenor: values.ppTenor,
+      mode_of_payment: values.ppModeOfPayment,
+      mode_of_interest: values.ppModeOfInterest,
+      monthly_amount_figures: values.ppAmountFigures
+        ? Number(values.ppAmountFigures)
+        : null,
+      monthly_amount_words: values.ppAmountWords,
+      monthly_payment_date: new Date().toISOString().split("T")[0],
+    }),
+    ...(values.investmentPlan === "premium" && {
+      monthly_amount_figures: values.prMonthlyAmountFigures
+        ? Number(values.prMonthlyAmountFigures)
+        : null,
+      monthly_amount_words: values.prMonthlyAmountWords,
+      tenor: values.prTenor,
+      monthly_payment_date: values.prMonthlyPaymentDate,
+    }),
+    ...(values.investmentPlan === "reif" && {
+      units: values.reifUnits ? Number(values.reifUnits) : null,
+      total_figures: values.reifTotalFigures
+        ? Number(values.reifTotalFigures)
+        : null,
+      total_words: values.reifTotalWords,
+      mode_of_payment: values.reifModeOfPayment,
+      mode_of_interest: values.reifModeOfInterest,
+      monthly_amount_figures: values.reifTotalFigures
+        ? Number(values.reifTotalFigures)
+        : null,
+      monthly_amount_words: values.reifTotalWords,
+      tenor: values.reifTenor,
+      monthly_payment_date: new Date().toISOString().split("T")[0],
+    }),
+  };
+
   const compliance = {
     personal_info: {
       nationality: values.nationality,
@@ -401,36 +451,6 @@ async function submitVerification(
       next_of_kin_address: values.nextOfKinAddress,
       signature_url: signatureUrl,
     },
-    investment_plan: {
-      plan: values.investmentPlan,
-      ...(values.investmentPlan === "premium_plus" && {
-        investment_type: values.ppInvestmentType,
-        amount_figures: values.ppAmountFigures
-          ? Number(values.ppAmountFigures)
-          : null,
-        amount_words: values.ppAmountWords,
-        tenor: values.ppTenor,
-        mode_of_payment: values.ppModeOfPayment,
-        mode_of_interest: values.ppModeOfInterest,
-      }),
-      ...(values.investmentPlan === "premium" && {
-        monthly_amount_figures: values.prMonthlyAmountFigures
-          ? Number(values.prMonthlyAmountFigures)
-          : null,
-        monthly_amount_words: values.prMonthlyAmountWords,
-        tenor: values.prTenor,
-        monthly_payment_date: values.prMonthlyPaymentDate,
-      }),
-      ...(values.investmentPlan === "reif" && {
-        units: values.reifUnits ? Number(values.reifUnits) : null,
-        total_figures: values.reifTotalFigures
-          ? Number(values.reifTotalFigures)
-          : null,
-        total_words: values.reifTotalWords,
-        mode_of_payment: values.reifModeOfPayment,
-        mode_of_interest: values.reifModeOfInterest,
-      }),
-    },
     bank_details: {
       bank_name: values.bankName,
       account_name: values.accountName,
@@ -438,16 +458,79 @@ async function submitVerification(
     },
   };
 
-  const { error } = await supabase
+  // 1. Fetch current compliance to preserve existing investment plans
+  const { data: profile, error: fetchErr } = await supabase
+    .from("profiles")
+    .select("compliance")
+    .eq("id", uid)
+    .single();
+
+  if (fetchErr) throw new Error(fetchErr.message);
+
+  const existingPlans: Record<string, unknown>[] = Array.isArray(
+    profile?.compliance?.investment_plans,
+  )
+    ? (profile.compliance.investment_plans as Record<string, unknown>[])
+    : profile?.compliance?.investment_plan
+      ? [profile.compliance.investment_plan as Record<string, unknown>]
+      : [];
+
+  const updatedCompliance = {
+    ...(profile?.compliance ?? {}),
+    ...compliance, // Merge new compliance data
+    investment_plans: [...existingPlans, investmentPlanPayload],
+    investment_plan: investmentPlanPayload, // Keep for backward compatibility
+  };
+
+  // 2. Update profile with compliance data
+  const { error: updateErr } = await supabase
     .from("profiles")
     .update({
-      compliance,
+      compliance: updatedCompliance,
       isVerified: true,
       updated_at: new Date().toISOString(),
     })
     .eq("id", uid);
 
-  if (error) throw new Error(error.message);
+  if (updateErr) throw new Error(updateErr.message);
+
+  // 3. Insert transaction record
+  await insertTransaction({
+    user_id: uid,
+    plan: values.investmentPlan,
+    amount:
+      values.investmentPlan === "premium_plus"
+        ? Number(values.ppAmountFigures)
+        : values.investmentPlan === "premium"
+          ? Number(values.prMonthlyAmountFigures)
+          : Number(values.reifTotalFigures),
+    amount_words:
+      values.investmentPlan === "premium_plus"
+        ? values.ppAmountWords
+        : values.investmentPlan === "premium"
+          ? values.prMonthlyAmountWords
+          : values.reifTotalWords,
+    tenor:
+      values.investmentPlan === "premium_plus"
+        ? values.ppTenor
+        : values.investmentPlan === "premium"
+          ? values.prTenor
+          : values.reifTenor,
+    mode_of_payment:
+      values.investmentPlan === "premium_plus"
+        ? values.ppModeOfPayment
+        : values.investmentPlan === "reif"
+          ? values.reifModeOfPayment
+          : undefined,
+    mode_of_interest:
+      values.investmentPlan === "premium_plus"
+        ? values.ppModeOfInterest
+        : values.investmentPlan === "reif"
+          ? values.reifModeOfInterest
+          : undefined,
+    units:
+      values.investmentPlan === "reif" ? Number(values.reifUnits) : undefined,
+  });
 
   return { uid, email: user.email ?? values.email };
 }
@@ -583,6 +666,7 @@ function buildInitialValues(
     stateOfOrigin: "",
     lga: "",
     nextOfKin: "",
+    reifTenor: "",
     nextOfKinPhone: "",
     nextOfKinAddress: "",
     signature: null,
@@ -1586,6 +1670,28 @@ function StepThree({ formik, fieldError }: StepProps) {
               </FieldGroup>
             </div>
             <FieldGroup
+              label="Investment Tenor"
+              error={fieldError("reifTenor")}
+            >
+              <Select
+                value={f.reifTenor}
+                onValueChange={(v) => set("reifTenor", v)}
+              >
+                <SelectTrigger
+                  className={`${inputCls} ${fieldError("prTenor") ? "border-destructive" : ""}`}
+                >
+                  <SelectValue placeholder="Select tenor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TENORS.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldGroup>
+            <FieldGroup
               label="Mode of Payment"
               error={fieldError("reifModeOfPayment")}
             >
@@ -1632,6 +1738,8 @@ function StepThree({ formik, fieldError }: StepProps) {
           </div>
         </div>
       )}
+
+      <BankDetailsDisplay />
     </div>
   );
 }

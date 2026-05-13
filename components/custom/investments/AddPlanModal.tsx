@@ -1,9 +1,15 @@
-// ─── Add Plan Modal ───────────────────────────────────────────────────────────
-
 import { useState } from "react";
 import { InvestmentPlan, PLAN_META } from "./InvestmentDetails";
 import { createClient } from "@/lib/supabase/client";
-import { AlertCircle, BadgeCheck, ChevronRight, Loader2, Sparkles } from "lucide-react";
+import { insertTransaction } from "@/hooks/insert-transaction";
+import {
+  AlertCircle,
+  BadgeCheck,
+  ChevronRight,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
+import BankDetailsDisplay from "../BankDetailsDisplay";
 
 type ModalPlan = "premium_plus" | "premium" | "reif";
 const TENORS = [
@@ -48,7 +54,6 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
   const [error, setError] = useState<string | null>(null);
 
   // Premium Plus fields
-  const [ppInvestmentType, setPpInvestmentType] = useState("");
   const [ppAmountFigures, setPpAmountFigures] = useState("");
   const [ppAmountWords, setPpAmountWords] = useState("");
   const [ppTenor, setPpTenor] = useState("");
@@ -119,17 +124,15 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Build the full investment_plan object that matches the compliance schema
       const investmentPlanPayload: Record<string, unknown> = {
         plan: selectedPlan,
         ...(selectedPlan === "premium_plus" && {
-          investment_type: ppInvestmentType,
+          investment_type: selectedPlan,
           amount_figures: Number(ppAmountFigures),
           amount_words: ppAmountWords,
           tenor: ppTenor,
           mode_of_payment: ppModeOfPayment,
           mode_of_interest: ppModeOfInterest,
-          // Keep display-compatible fields
           monthly_amount_figures: Number(ppAmountFigures),
           monthly_amount_words: ppAmountWords,
           monthly_payment_date: new Date().toISOString().split("T")[0],
@@ -146,7 +149,6 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
           total_words: reifTotalWords,
           mode_of_payment: reifModeOfPayment,
           mode_of_interest: reifModeOfInterest,
-          // Keep display-compatible fields
           monthly_amount_figures: Number(reifTotalFigures),
           monthly_amount_words: reifTotalWords,
           tenor: "N/A",
@@ -154,7 +156,7 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
         }),
       };
 
-      // Fetch current compliance so we don't overwrite other fields
+      // 1. Fetch current compliance
       const { data: profile, error: fetchErr } = await supabase
         .from("profiles")
         .select("compliance")
@@ -163,8 +165,17 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
 
       if (fetchErr) throw new Error(fetchErr.message);
 
+      const existingPlans: Record<string, unknown>[] = Array.isArray(
+        profile?.compliance?.investment_plans,
+      )
+        ? (profile.compliance.investment_plans as Record<string, unknown>[])
+        : profile?.compliance?.investment_plan
+          ? [profile.compliance.investment_plan as Record<string, unknown>]
+          : [];
+
       const updatedCompliance = {
         ...(profile?.compliance ?? {}),
+        investment_plans: [...existingPlans, investmentPlanPayload],
         investment_plan: investmentPlanPayload,
       };
 
@@ -177,6 +188,42 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
         .eq("id", user.id);
 
       if (updateErr) throw new Error(updateErr.message);
+
+      await insertTransaction({
+        user_id: user.id,
+        plan: selectedPlan,
+        amount:
+          selectedPlan === "premium_plus"
+            ? Number(ppAmountFigures)
+            : selectedPlan === "premium"
+              ? Number(prMonthlyAmountFigures)
+              : Number(reifTotalFigures),
+        amount_words:
+          selectedPlan === "premium_plus"
+            ? ppAmountWords
+            : selectedPlan === "premium"
+              ? prMonthlyAmountWords
+              : reifTotalWords,
+        tenor:
+          selectedPlan === "premium_plus"
+            ? ppTenor
+            : selectedPlan === "premium"
+              ? prTenor
+              : "N/A",
+        mode_of_payment:
+          selectedPlan === "premium_plus"
+            ? ppModeOfPayment
+            : selectedPlan === "reif"
+              ? reifModeOfPayment
+              : undefined,
+        mode_of_interest:
+          selectedPlan === "premium_plus"
+            ? ppModeOfInterest
+            : selectedPlan === "reif"
+              ? reifModeOfInterest
+              : undefined,
+        units: selectedPlan === "reif" ? Number(reifUnits) : undefined,
+      });
 
       onSuccess(planData);
       onClose();
@@ -191,19 +238,16 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
   const PlanIcon = meta.icon;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 h-screen flex items-center justify-center p-4">
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
         onClick={onClose}
       />
       <div className="relative w-full max-w-lg rounded-2xl bg-white shadow-2xl overflow-hidden">
-        <div className="h-1 w-full bg-linear-to-r from-amber-400 via-[#ff6900] to-orange-500" />
-
         <div className="p-6 max-h-[85vh] overflow-y-auto">
           {/* Header */}
           <div className="mb-5">
             <div className="flex items-center gap-2 mb-1">
-              <Sparkles className="size-4 text-[#ff6900]" />
               <span className="text-xs font-semibold uppercase tracking-widest text-[#ff6900]">
                 New Investment
               </span>
@@ -299,12 +343,6 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
               {selectedPlan === "premium_plus" && (
                 <div className="space-y-3">
                   <Field
-                    label="Investment Type"
-                    value={ppInvestmentType}
-                    onChange={setPpInvestmentType}
-                    placeholder="e.g. Fixed Deposit"
-                  />
-                  <Field
                     label="Amount (₦)"
                     value={ppAmountFigures}
                     onChange={setPpAmountFigures}
@@ -399,6 +437,12 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
                     options={[...PAYMENT_MODES]}
                   />
                   <SelectField
+                    label="Tenor"
+                    value={prTenor}
+                    onChange={setPrTenor}
+                    options={[...TENORS]}
+                  />
+                  <SelectField
                     label="Mode of Interest Repayment"
                     value={reifModeOfInterest}
                     onChange={setReifModeOfInterest}
@@ -406,7 +450,7 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
                   />
                 </div>
               )}
-
+              <BankDetailsDisplay />
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {
@@ -440,7 +484,7 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
   );
 }
 
-// ─── Small form helpers used inside the modal ─────────────────────────────────
+// ─── Small form helpers ───────────────────────────────────────────────────────
 
 function Field({
   label,

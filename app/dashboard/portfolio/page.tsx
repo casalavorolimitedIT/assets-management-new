@@ -1,9 +1,9 @@
-import InvestmentDetails from "@/components/custom/investments/InvestmentDetails";
 import InvestmentDetailsAdmin from "@/components/custom/investments/InvestmentDetailsAdmin";
+import UserPortfolio from "@/components/custom/portfolio/UserPortfolio";
 import { createClient } from "@/lib/supabase/server";
 import React from "react";
 
-const InvestmentPage = async () => {
+const portfolioDetails = async () => {
   const supabase = await createClient();
   const { data: authData } = await supabase.auth.getUser();
 
@@ -16,7 +16,7 @@ const InvestmentPage = async () => {
   return (
     <>
       {profile.role === "USER" ? (
-        <InvestmentDetails />
+        <UserPortfolio />
       ) : (
         <InvestmentDetailsAdmin profile={profile} />
       )}
@@ -24,4 +24,4 @@ const InvestmentPage = async () => {
   );
 };
 
-export default InvestmentPage;
+export default portfolioDetails;

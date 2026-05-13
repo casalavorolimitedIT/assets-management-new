@@ -9,15 +9,13 @@ import {
   ArrowDownRight,
   ShieldAlert,
   ArrowRight,
-  RefreshCw,
   Eye,
   EyeOff,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
   Landmark,
   PiggyBank,
   Building2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -31,16 +29,6 @@ interface StatCard {
   sub: string;
 }
 
-interface Transaction {
-  id: string;
-  description: string;
-  amount: string;
-  type: "credit" | "debit";
-  date: string;
-  status: "completed" | "pending" | "failed";
-  category: string;
-}
-
 interface PortfolioItem {
   name: string;
   value: string;
@@ -50,66 +38,126 @@ interface PortfolioItem {
   changeType: "up" | "down";
 }
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const TRANSACTIONS: Transaction[] = [
-  {
-    id: "1",
-    description: "Premium Plus — Monthly Return",
-    amount: "₦85,000",
-    type: "credit",
-    date: "Today, 9:41 AM",
-    status: "completed",
-    category: "Return",
-  },
-  {
-    id: "2",
-    description: "REIF Unit Purchase",
-    amount: "₦100,000",
-    type: "debit",
-    date: "Yesterday, 2:15 PM",
-    status: "completed",
-    category: "Investment",
-  },
-  {
-    id: "3",
-    description: "Premium — Monthly Contribution",
-    amount: "₦50,000",
-    type: "debit",
-    date: "May 28, 10:00 AM",
-    status: "completed",
-    category: "Investment",
-  },
-  {
-    id: "4",
-    description: "Premium Plus — Interest Payment",
-    amount: "₦42,500",
-    type: "credit",
-    date: "May 25, 3:30 PM",
-    status: "pending",
-    category: "Return",
-  },
-  {
-    id: "5",
-    description: "Premium — Monthly Contribution",
-    amount: "₦50,000",
-    type: "debit",
-    date: "Apr 28, 10:00 AM",
-    status: "completed",
-    category: "Investment",
-  },
-];
+const PLAN_LABELS: Record<string, string> = {
+  premium: "Premium",
+  premium_plus: "Premium Plus",
+  reif: "REIF",
+};
+const PLAN_COLORS: Record<string, string> = {
+  premium: "#6366f1",
+  premium_plus: "#ff6900",
+  reif: "#10b981",
+};
+const PLAN_RATES: Record<string, string> = {
+  premium: "15% p.a.",
+  premium_plus: "17% p.a.",
+  reif: "12% p.a.",
+};
+
+function deriveStats(inv: any): StatCard[] {
+  const planKey: string = inv?.plan ?? "";
+  const planLabel = PLAN_LABELS[planKey] ?? "—";
+  const planRate = PLAN_RATES[planKey] ?? "—";
+
+  const monthlyFigures: number | null = inv?.monthly_amount_figures ?? null;
+  const amountFigures: number | null = inv?.amount_figures ?? null;
+  const totalFigures: number | null = inv?.total_figures ?? null;
+
+  const investmentAmount = monthlyFigures
+    ? `₦${monthlyFigures.toLocaleString("en-NG")}`
+    : amountFigures
+      ? `₦${amountFigures.toLocaleString("en-NG")}`
+      : totalFigures
+        ? `₦${totalFigures.toLocaleString("en-NG")}`
+        : "—";
+
+  const nextPayment = inv?.monthly_payment_date
+    ? new Date(inv.monthly_payment_date).toLocaleDateString("en-NG", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      })
+    : "—";
+
+  return [
+    {
+      label: "Investment Amount",
+      value: investmentAmount,
+      change:
+        inv?.monthly_amount_words ??
+        inv?.amount_words ??
+        inv?.total_words ??
+        "",
+      changeType: "neutral",
+      icon: <Wallet className="size-5" />,
+      sub: planLabel !== "—" ? `${planLabel} plan` : "No plan yet",
+    },
+    {
+      label: "Investment Plan",
+      value: planLabel,
+      change: planRate,
+      changeType: "neutral",
+      icon: <TrendingUp className="size-5" />,
+      sub: "interest rate",
+    },
+    {
+      label: "Tenor",
+      value: inv?.tenor ?? "—",
+      change: "",
+      changeType: "neutral",
+      icon: <PiggyBank className="size-5" />,
+      sub: "investment duration",
+    },
+    {
+      label: "Next Payment",
+      value: nextPayment,
+      change: "",
+      changeType: "neutral",
+      icon: <Landmark className="size-5" />,
+      sub: "scheduled date",
+    },
+  ];
+}
+
+function derivePortfolio(plans: any[]): PortfolioItem[] {
+  if (!plans.length) return [];
+  const total = plans.reduce((sum, inv) => {
+    return (
+      sum +
+      (inv?.monthly_amount_figures ??
+        inv?.amount_figures ??
+        inv?.total_figures ??
+        0)
+    );
+  }, 0);
+
+  return plans.map((inv) => {
+    const planKey = inv?.plan ?? "";
+    const amount =
+      inv?.monthly_amount_figures ??
+      inv?.amount_figures ??
+      inv?.total_figures ??
+      0;
+    return {
+      name: PLAN_LABELS[planKey] ?? planKey,
+      value: `₦${amount.toLocaleString("en-NG")}`,
+      percent: total > 0 ? Math.round((amount / total) * 100) : 0,
+      color: PLAN_COLORS[planKey] ?? "#e5e7eb",
+      change: PLAN_RATES[planKey] ?? "—",
+      changeType: "up",
+    };
+  });
+}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function StatCardItem({ card }: { card: StatCard }) {
   const [hidden, setHidden] = useState(false);
-
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      {/* Subtle gradient accent */}
       <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-[#ff6900]/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
       <div className="relative flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
@@ -131,18 +179,6 @@ function StatCardItem({ card }: { card: StatCard }) {
             </button>
           </div>
           <div className="mt-1.5 flex items-center gap-1.5">
-            {card.changeType === "up" && (
-              <span className="flex items-center gap-0.5 text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="size-3" />
-                {card.change}
-              </span>
-            )}
-            {card.changeType === "down" && (
-              <span className="flex items-center gap-0.5 text-xs font-medium text-red-500">
-                <ArrowDownRight className="size-3" />
-                {card.change}
-              </span>
-            )}
             {card.changeType === "neutral" && (
               <span className="text-xs font-medium text-zinc-500">
                 {card.change}
@@ -190,107 +226,20 @@ export function DashboardContent({
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  const inv = compliance?.investment_plan ?? null;
+  // Support both investment_plans array and legacy investment_plan
+  const allPlans: any[] = compliance?.investment_plans?.length
+    ? compliance.investment_plans
+    : compliance?.investment_plan
+      ? [compliance.investment_plan]
+      : [];
 
-  // ── Derive real values ──────────────────────────────────────────────────────
+  const [activePlanIndex, setActivePlanIndex] = useState(0);
+  const hasMultiplePlans = allPlans.length > 1;
+  const activePlan = allPlans[activePlanIndex] ?? null;
 
-  const PLAN_LABELS: Record<string, string> = {
-    premium: "Premium",
-    premium_plus: "Premium Plus",
-    reif: "REIF",
-  };
-  const PLAN_COLORS: Record<string, string> = {
-    premium: "#ff9f5a",
-    premium_plus: "#ff6900",
-    reif: "#ffd4b3",
-  };
-  const PLAN_RATES: Record<string, string> = {
-    premium: "15% p.a.",
-    premium_plus: "17% p.a.",
-    reif: "12% p.a.",
-  };
+  const stats = activePlan ? deriveStats(activePlan) : [];
+  const portfolio = derivePortfolio(allPlans);
 
-  const planKey: string = inv?.plan ?? "";
-  const planLabel = PLAN_LABELS[planKey] ?? "—";
-  const planColor = PLAN_COLORS[planKey] ?? "#e5e7eb";
-  const planRate = PLAN_RATES[planKey] ?? "—";
-
-  const monthlyFigures: number | null = inv?.monthly_amount_figures ?? null;
-  const amountFigures: number | null = inv?.amount_figures ?? null;
-  const totalFigures: number | null = inv?.total_figures ?? null;
-
-  const investmentAmount = monthlyFigures
-    ? `₦${monthlyFigures.toLocaleString("en-NG")}`
-    : amountFigures
-      ? `₦${amountFigures.toLocaleString("en-NG")}`
-      : totalFigures
-        ? `₦${totalFigures.toLocaleString("en-NG")}`
-        : "—";
-
-  const nextPayment = inv?.monthly_payment_date
-    ? new Date(inv.monthly_payment_date).toLocaleDateString("en-NG", {
-        day: "numeric",
-        month: "short",
-        year: "numeric",
-      })
-    : "—";
-
-  // ── Stats built from real data ──────────────────────────────────────────────
-
-  const STATS: StatCard[] = [
-    {
-      label: "Investment Amount",
-      value: investmentAmount,
-      change:
-        inv?.monthly_amount_words ??
-        inv?.amount_words ??
-        inv?.total_words ??
-        "",
-      changeType: "neutral",
-      icon: <Wallet className="size-5" />,
-      sub: planLabel !== "—" ? `${planLabel} plan` : "No plan yet",
-    },
-    {
-      label: "Investment Plan",
-      value: planLabel,
-      change: planRate,
-      changeType: "neutral",
-      icon: <TrendingUp className="size-5" />,
-      sub: "interest rate",
-    },
-    {
-      label: "Tenor",
-      value: inv?.tenor ?? "—",
-      change: "",
-      changeType: "neutral",
-      icon: <PiggyBank className="size-5" />,
-      sub: "investment duration",
-    },
-    {
-      label: "Next Payment",
-      value: nextPayment,
-      change: "",
-      changeType: "neutral",
-      icon: <Landmark className="size-5" />,
-      sub: "scheduled date",
-    },
-  ];
-
-  // ── Portfolio: one entry per active plan ────────────────────────────────────
-  // Currently only one plan exists; extend this array when multiple plans are supported.
-
-  const PORTFOLIO: PortfolioItem[] = planKey
-    ? [
-        {
-          name: planLabel,
-          value: investmentAmount,
-          percent: 100,
-          color: planColor,
-          change: planRate,
-          changeType: "up",
-        },
-      ]
-    : [];
   return (
     <div className="space-y-6">
       {/* ── Hero greeting ── */}
@@ -305,7 +254,6 @@ export function DashboardContent({
           <p className="mt-1 text-sm text-zinc-500">
             Here's what's happening with your investments today.
           </p>
-
           {!isVerified && (
             <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
               <ShieldAlert className="size-4 text-amber-500 shrink-0" />
@@ -324,12 +272,115 @@ export function DashboardContent({
         </div>
       </div>
 
-      {/* ── Stat cards ── */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {STATS.map((card: any) => (
-          <StatCardItem key={card.label} card={card} />
-        ))}
+      {/* ── Total portfolio value ── */}
+{allPlans.length > 0 && (
+  <div className="relative overflow-hidden rounded-2xl border border-orange-100 bg-linear-to-br from-[#ff6900] to-orange-400 p-5 text-white shadow-sm">
+    <div className="pointer-events-none absolute -right-6 -top-6 size-32 rounded-full bg-white/10" />
+    <div className="pointer-events-none absolute -bottom-8 right-16 size-24 rounded-full bg-white/5" />
+
+    <div className="relative flex items-center justify-between gap-4">
+      <div>
+        <p className="text-xs font-medium uppercase tracking-wider text-white/70">
+          Total Portfolio Value
+        </p>
+        <p className="mt-1.5 text-3xl font-black tabular-nums tracking-tight">
+          ₦
+          {allPlans
+            .reduce((sum, inv) => {
+              return (
+                sum +
+                (inv?.monthly_amount_figures ??
+                  inv?.amount_figures ??
+                  inv?.total_figures ??
+                  0)
+              );
+            }, 0)
+            .toLocaleString("en-NG")}
+        </p>
+        <p className="mt-1 text-xs text-white/60">
+          Across {allPlans.length} active plan{allPlans.length !== 1 ? "s" : ""}
+        </p>
       </div>
+
+      <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+        <TrendingUp className="size-6 text-white" />
+      </div>
+    </div>
+  </div>
+)}
+
+      {/* ── Plan toggle (only shown when multiple plans exist) ── */}
+      {allPlans.length > 0 && (
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-zinc-900">
+              Plan Overview
+            </h2>
+            {hasMultiplePlans && (
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {activePlanIndex + 1} of {allPlans.length} plans
+              </p>
+            )}
+          </div>
+
+          {hasMultiplePlans && (
+            <div className="flex items-center gap-1">
+              {/* Dot indicators */}
+              <div className="flex items-center gap-1 mr-2">
+                {allPlans.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setActivePlanIndex(i)}
+                    className={`rounded-full transition-all duration-200 ${
+                      i === activePlanIndex
+                        ? "w-5 h-2 bg-[#ff6900]"
+                        : "size-2 bg-zinc-300 hover:bg-zinc-400"
+                    }`}
+                  />
+                ))}
+              </div>
+              {/* Prev / Next */}
+              <button
+                onClick={() => setActivePlanIndex((i) => Math.max(0, i - 1))}
+                disabled={activePlanIndex === 0}
+                className="flex size-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <button
+                onClick={() =>
+                  setActivePlanIndex((i) =>
+                    Math.min(allPlans.length - 1, i + 1),
+                  )
+                }
+                disabled={activePlanIndex === allPlans.length - 1}
+                className="flex size-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Stat cards ── */}
+      {stats.length > 0 ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {stats.map((card: any) => (
+            <StatCardItem key={card.label} card={card} />
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-200 bg-white py-12 text-center">
+          <TrendingUp className="size-8 text-zinc-300 mb-3" />
+          <p className="text-sm font-semibold text-zinc-500">
+            No investment plan yet
+          </p>
+          <p className="text-xs text-zinc-400 mt-1">
+            Add a plan to see your overview here
+          </p>
+        </div>
+      )}
 
       {/* ── Middle row: Portfolio + Quick Actions ── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
@@ -344,57 +395,57 @@ export function DashboardContent({
               </p>
             </div>
           </div>
-
-          <PortfolioBar items={PORTFOLIO} />
-
-          <div className="mt-5 space-y-3">
-            {PORTFOLIO.map((item) => (
-              <div
-                key={item.name}
-                className="flex items-center gap-3 rounded-xl p-3 hover:bg-zinc-50 transition-colors cursor-default"
-              >
-                <div
-                  className="size-3 rounded-full shrink-0"
-                  style={{ backgroundColor: item.color }}
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-zinc-900">
-                      {item.name}
-                    </p>
-                    <p className="text-sm font-semibold text-zinc-900 tabular-nums">
-                      {item.value}
-                    </p>
-                  </div>
-                  <div className="mt-1.5 flex items-center justify-between">
-                    <div className="h-1.5 flex-1 mr-4 rounded-full bg-zinc-100 overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-700"
-                        style={{
-                          width: `${item.percent}%`,
-                          backgroundColor: item.color,
-                        }}
-                      />
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-zinc-400">
-                        {item.percent}%
-                      </span>
-                      <span
-                        className={`text-xs font-medium ${
-                          item.changeType === "up"
-                            ? "text-emerald-600"
-                            : "text-red-500"
-                        }`}
-                      >
-                        {item.change}
-                      </span>
+          {portfolio.length > 0 ? (
+            <>
+              <PortfolioBar items={portfolio} />
+              <div className="mt-5 space-y-3">
+                {portfolio.map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center gap-3 rounded-xl p-3 hover:bg-zinc-50 transition-colors cursor-default"
+                  >
+                    <div
+                      className="size-3 rounded-full shrink-0"
+                      style={{ backgroundColor: item.color }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-zinc-900">
+                          {item.name}
+                        </p>
+                        <p className="text-sm font-semibold text-zinc-900 tabular-nums">
+                          {item.value}
+                        </p>
+                      </div>
+                      <div className="mt-1.5 flex items-center justify-between">
+                        <div className="h-1.5 flex-1 mr-4 rounded-full bg-zinc-100 overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{
+                              width: `${item.percent}%`,
+                              backgroundColor: item.color,
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xs text-zinc-400">
+                            {item.percent}%
+                          </span>
+                          <span className="text-xs font-medium text-emerald-600">
+                            {item.change}
+                          </span>
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <p className="text-sm text-zinc-400">No portfolio data yet</p>
+            </div>
+          )}
         </div>
 
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
@@ -434,7 +485,7 @@ export function DashboardContent({
               <ArrowRight className="size-4 text-zinc-400 group-hover:text-[#ff6900] group-hover:translate-x-0.5 transition-all" />
             </Link>
 
-            {!profile.isVerified && (
+            {!profile.metamap_status && (
               <Link
                 href="/verification"
                 className="group flex items-center gap-3 rounded-xl border border-zinc-200 p-4 hover:border-[#ff6900]/40 hover:bg-[#fff1e6] transition-all duration-150"
@@ -454,163 +505,6 @@ export function DashboardContent({
           </div>
         </div>
       </div>
-
-      {/* <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-100">
-          <div>
-            <h2 className="text-base font-semibold text-zinc-900">
-              Recent Transactions
-            </h2>
-            <p className="text-xs text-zinc-500 mt-0.5">
-              Your latest investment activity
-            </p>
-          </div>
-          <Link
-            href="/dashboard/transactions"
-            className="flex items-center gap-1 text-xs font-medium text-[#ff6900] hover:underline underline-offset-2 transition-colors"
-          >
-            View all
-            <ArrowRight className="size-3" />
-          </Link>
-        </div>
-
-        <div className="divide-y divide-zinc-100">
-          {TRANSACTIONS.map((tx) => (
-            <div
-              key={tx.id}
-              className="flex items-center gap-4 px-6 py-4 hover:bg-zinc-50 transition-colors"
-            >
-              <div
-                className={`flex size-9 shrink-0 items-center justify-center rounded-full ${
-                  tx.type === "credit"
-                    ? "bg-emerald-50 text-emerald-600"
-                    : "bg-zinc-100 text-zinc-500"
-                }`}
-              >
-                {tx.type === "credit" ? (
-                  <ArrowDownRight className="size-4" />
-                ) : (
-                  <ArrowUpRight className="size-4" />
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-zinc-900 truncate">
-                  {tx.description}
-                </p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-xs text-zinc-400">{tx.date}</span>
-                  <span className="size-1 rounded-full bg-zinc-300" />
-                  <span className="text-xs text-zinc-400">{tx.category}</span>
-                </div>
-              </div>
-
-              <div className="text-right shrink-0">
-                <p
-                  className={`text-sm font-semibold tabular-nums ${
-                    tx.type === "credit" ? "text-emerald-600" : "text-zinc-900"
-                  }`}
-                >
-                  {tx.type === "credit" ? "+" : "-"}
-                  {tx.amount}
-                </p>
-                <div className="mt-0.5 flex justify-end">
-                  <StatusBadge status={tx.status} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-semibold text-zinc-900">
-            Investment Plans
-          </h2>
-          <Link
-            href="/verification"
-            className="flex items-center gap-1.5 rounded-lg bg-[#ff6900] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#e55f00] transition-colors"
-          >
-            + New Plan
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          {[
-            {
-              name: "Premium Plus",
-              amount: "₦2,500,000",
-              tenor: "12 Months",
-              rate: "17% p.a.",
-              status: "Active",
-              maturity: "Dec 2025",
-              color: "#ff6900",
-            },
-            {
-              name: "Premium",
-              amount: "₦50,000/mo",
-              tenor: "24 Months",
-              rate: "15% p.a.",
-              status: "Active",
-              maturity: "Jun 2026",
-              color: "#ff9f5a",
-            },
-            {
-              name: "REIF",
-              amount: "₦550,000",
-              tenor: "10 Units",
-              rate: "12% p.a.",
-              status: "Active",
-              maturity: "Mar 2026",
-              color: "#ffd4b3",
-            },
-          ].map((plan) => (
-            <div
-              key={plan.name}
-              className="group relative overflow-hidden rounded-xl border border-zinc-200 p-4 hover:border-[#ff6900]/30 hover:shadow-sm transition-all duration-200 cursor-default"
-            >
-              <div
-                className="absolute top-0 left-0 h-1 w-full rounded-t-xl"
-                style={{ backgroundColor: plan.color }}
-              />
-              <div className="mt-1">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-zinc-900">
-                    {plan.name}
-                  </p>
-                  <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-600">
-                    {plan.status}
-                  </span>
-                </div>
-                <p className="mt-2 text-xl font-bold text-zinc-900 tabular-nums">
-                  {plan.amount}
-                </p>
-                <div className="mt-3 space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-zinc-500">Tenor</span>
-                    <span className="font-medium text-zinc-700">
-                      {plan.tenor}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-zinc-500">Rate</span>
-                    <span className="font-medium text-emerald-600">
-                      {plan.rate}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-zinc-500">Maturity</span>
-                    <span className="font-medium text-zinc-700">
-                      {plan.maturity}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div> */}
     </div>
   );
 }

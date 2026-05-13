@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,8 +15,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "my-supabase-boilerplate",
-  description: "A Next.js boilerplate with Supabase authentication and session management.",
+  title: "Casalavoro Asset Management",
+  description:
+    "Sign in to access your portfolio, track performance, and manage your investments in real time.",
 };
 
 export default function RootLayout({

@@ -20,8 +20,6 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export type TxStatus = "pending" | "active" | "completed" | "failed";
 export type TxType = "investment" | "return" | "withdrawal";
 
@@ -39,8 +37,6 @@ export interface Transaction {
   created_at: string;
   updated_at: string;
 }
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PLAN_META: Record<
   string,
@@ -116,8 +112,6 @@ const fmtTime = (s: string) =>
     minute: "2-digit",
   });
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
 function StatusBadge({ status }: { status: TxStatus }) {
   const m = STATUS_META[status];
   const Icon = m.icon;
@@ -130,8 +124,6 @@ function StatusBadge({ status }: { status: TxStatus }) {
     </span>
   );
 }
-
-// ─── Transaction row ──────────────────────────────────────────────────────────
 
 function TxRow({ tx, index }: { tx: Transaction; index: number }) {
   const [expanded, setExpanded] = useState(false);
@@ -187,12 +179,24 @@ function TxRow({ tx, index }: { tx: Transaction; index: number }) {
         <div className="mx-5 mb-4 rounded-xl bg-zinc-50 border border-zinc-200 p-4">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 sm:grid-cols-3">
             {[
-              { label: "Transaction ID", value: tx.id.slice(0, 8).toUpperCase() },
+              {
+                label: "Transaction ID",
+                value: tx.id.slice(0, 8).toUpperCase(),
+              },
               { label: "Plan", value: plan.label },
-              { label: "Type", value: tx.type.charAt(0).toUpperCase() + tx.type.slice(1) },
-              tx.mode_of_payment && { label: "Payment Mode", value: tx.mode_of_payment },
+              {
+                label: "Type",
+                value: tx.type.charAt(0).toUpperCase() + tx.type.slice(1),
+              },
+              tx.mode_of_payment && {
+                label: "Payment Mode",
+                value: tx.mode_of_payment,
+              },
               tx.tenor && { label: "Tenor", value: tx.tenor },
-              tx.amount_words && { label: "Amount in Words", value: tx.amount_words },
+              tx.amount_words && {
+                label: "Amount in Words",
+                value: tx.amount_words,
+              },
             ]
               .filter(Boolean)
               .map((row: any) => (
@@ -212,8 +216,6 @@ function TxRow({ tx, index }: { tx: Transaction; index: number }) {
   );
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
-
 function EmptyState({ filtered }: { filtered: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center py-20 text-center px-6">
@@ -231,8 +233,6 @@ function EmptyState({ filtered }: { filtered: boolean }) {
     </div>
   );
 }
-
-// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function UserTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -261,7 +261,9 @@ export default function UserTransactions() {
       if (error) throw new Error(error.message);
       setTransactions(data ?? []);
     } catch (err) {
-      setFetchError(err instanceof Error ? err.message : "Failed to load transactions.");
+      setFetchError(
+        err instanceof Error ? err.message : "Failed to load transactions.",
+      );
     } finally {
       setLoading(false);
     }
@@ -271,16 +273,14 @@ export default function UserTransactions() {
     fetchTransactions();
   }, []);
 
-  // ── Derived stats ──────────────────────────────────────────────────────────
-
   const totalInvested = transactions
     .filter((t) => t.type === "investment")
     .reduce((s, t) => s + t.amount, 0);
 
-  const pendingCount = transactions.filter((t) => t.status === "pending").length;
+  const pendingCount = transactions.filter(
+    (t) => t.status === "pending",
+  ).length;
   const activeCount = transactions.filter((t) => t.status === "active").length;
-
-  // ── Filtering ──────────────────────────────────────────────────────────────
 
   const filtered = transactions.filter((tx) => {
     const matchSearch =
@@ -295,8 +295,6 @@ export default function UserTransactions() {
   const isFiltered =
     search !== "" || filterStatus !== "all" || filterPlan !== "all";
 
-  // ── Group by date ──────────────────────────────────────────────────────────
-
   const grouped = filtered.reduce<Record<string, Transaction[]>>((acc, tx) => {
     const day = new Date(tx.created_at).toLocaleDateString("en-NG", {
       weekday: "long",
@@ -307,8 +305,6 @@ export default function UserTransactions() {
     (acc[day] ??= []).push(tx);
     return acc;
   }, {});
-
-  // ── Render ─────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -390,7 +386,9 @@ export default function UserTransactions() {
               key={s.label}
               className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm"
             >
-              <div className={`mb-2 flex size-7 items-center justify-center rounded-lg ${s.bg} ${s.color}`}>
+              <div
+                className={`mb-2 flex size-7 items-center justify-center rounded-lg ${s.bg} ${s.color}`}
+              >
                 {s.icon}
               </div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
@@ -421,19 +419,21 @@ export default function UserTransactions() {
           {/* Status filter */}
           <div className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm">
             <Filter className="ml-2 size-3.5 text-zinc-400" />
-            {(["all", "pending", "active", "completed", "failed"] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setFilterStatus(s)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-all ${
-                  filterStatus === s
-                    ? "bg-zinc-900 text-white shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700"
-                }`}
-              >
-                {s}
-              </button>
-            ))}
+            {(["all", "pending", "active", "completed", "failed"] as const).map(
+              (s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilterStatus(s)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-all ${
+                    filterStatus === s
+                      ? "bg-zinc-900 text-white shadow-sm"
+                      : "text-zinc-500 hover:text-zinc-700"
+                  }`}
+                >
+                  {s}
+                </button>
+              ),
+            )}
           </div>
 
           {/* Plan filter */}

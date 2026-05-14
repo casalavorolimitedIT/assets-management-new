@@ -1,7 +1,6 @@
 import InvestmentDetailsAdmin from "@/components/custom/investments/InvestmentDetailsAdmin";
 import UserPortfolio from "@/components/custom/portfolio/UserPortfolio";
 import { createClient } from "@/lib/supabase/server";
-import React from "react";
 
 const portfolioDetails = async () => {
   const supabase = await createClient();

@@ -5,8 +5,6 @@ import Link from "next/link";
 import {
   TrendingUp,
   Wallet,
-  ArrowUpRight,
-  ArrowDownRight,
   ShieldAlert,
   ArrowRight,
   Eye,
@@ -17,8 +15,6 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface StatCard {
   label: string;
@@ -37,8 +33,6 @@ interface PortfolioItem {
   change: string;
   changeType: "up" | "down";
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const PLAN_LABELS: Record<string, string> = {
   premium: "Premium",
@@ -151,8 +145,6 @@ function derivePortfolio(plans: any[]): PortfolioItem[] {
   });
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
 function StatCardItem({ card }: { card: StatCard }) {
   const [hidden, setHidden] = useState(false);
   return (
@@ -209,8 +201,6 @@ function PortfolioBar({ items }: { items: PortfolioItem[] }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
-
 export function DashboardContent({
   firstName,
   profile,
@@ -226,8 +216,7 @@ export function DashboardContent({
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-  // Support both investment_plans array and legacy investment_plan
-  const allPlans: any[] = compliance?.investment_plans?.length
+    const allPlans: any[] = compliance?.investment_plans?.length
     ? compliance.investment_plans
     : compliance?.investment_plan
       ? [compliance.investment_plan]
@@ -273,41 +262,42 @@ export function DashboardContent({
       </div>
 
       {/* ── Total portfolio value ── */}
-{allPlans.length > 0 && (
-  <div className="relative overflow-hidden rounded-2xl border border-orange-100 bg-linear-to-br from-[#ff6900] to-orange-400 p-5 text-white shadow-sm">
-    <div className="pointer-events-none absolute -right-6 -top-6 size-32 rounded-full bg-white/10" />
-    <div className="pointer-events-none absolute -bottom-8 right-16 size-24 rounded-full bg-white/5" />
+      {allPlans.length > 0 && (
+        <div className="relative overflow-hidden rounded-2xl border border-orange-100 bg-linear-to-br from-[#ff6900] to-orange-400 p-5 text-white shadow-sm">
+          <div className="pointer-events-none absolute -right-6 -top-6 size-32 rounded-full bg-white/10" />
+          <div className="pointer-events-none absolute -bottom-8 right-16 size-24 rounded-full bg-white/5" />
 
-    <div className="relative flex items-center justify-between gap-4">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wider text-white/70">
-          Total Portfolio Value
-        </p>
-        <p className="mt-1.5 text-3xl font-black tabular-nums tracking-tight">
-          ₦
-          {allPlans
-            .reduce((sum, inv) => {
-              return (
-                sum +
-                (inv?.monthly_amount_figures ??
-                  inv?.amount_figures ??
-                  inv?.total_figures ??
-                  0)
-              );
-            }, 0)
-            .toLocaleString("en-NG")}
-        </p>
-        <p className="mt-1 text-xs text-white/60">
-          Across {allPlans.length} active plan{allPlans.length !== 1 ? "s" : ""}
-        </p>
-      </div>
+          <div className="relative flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wider text-white/70">
+                Total Portfolio Value
+              </p>
+              <p className="mt-1.5 text-3xl font-black tabular-nums tracking-tight">
+                ₦
+                {allPlans
+                  .reduce((sum, inv) => {
+                    return (
+                      sum +
+                      (inv?.monthly_amount_figures ??
+                        inv?.amount_figures ??
+                        inv?.total_figures ??
+                        0)
+                    );
+                  }, 0)
+                  .toLocaleString("en-NG")}
+              </p>
+              <p className="mt-1 text-xs text-white/60">
+                Across {allPlans.length} active plan
+                {allPlans.length !== 1 ? "s" : ""}
+              </p>
+            </div>
 
-      <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
-        <TrendingUp className="size-6 text-white" />
-      </div>
-    </div>
-  </div>
-)}
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+              <TrendingUp className="size-6 text-white" />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Plan toggle (only shown when multiple plans exist) ── */}
       {allPlans.length > 0 && (

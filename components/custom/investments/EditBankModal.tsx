@@ -1,4 +1,3 @@
-// EditBankModal.tsx (or add at the bottom of InvestmentDetails.tsx)
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AlertCircle, Building2, Loader2, X } from "lucide-react";

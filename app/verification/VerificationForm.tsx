@@ -35,7 +35,6 @@ import { ImageUpload } from "@/components/custom/ImageUpload";
 import { insertTransaction } from "@/hooks/insert-transaction";
 import BankDetailsDisplay from "@/components/custom/BankDetailsDisplay";
 
-// ─── MetaMap web-component type augmentation ──────────────────────────────────
 declare global {
   namespace JSX {
     interface IntrinsicElements {
@@ -50,8 +49,6 @@ declare global {
     }
   }
 }
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type InvestmentPlan = "premium_plus" | "premium" | "reif" | "";
 
@@ -101,14 +98,10 @@ interface FormValues {
   accountNumber: string;
 }
 
-// ─── localStorage draft helpers ───────────────────────────────────────────────
-
-// Fields that cannot be serialized (File objects) — excluded from draft save/restore.
 const FILE_FIELDS: (keyof FormValues)[] = ["passportPhoto", "signature"];
 
 const DRAFT_KEY = "verification_form_draft";
 
-/** Serialisable subset of FormValues (File fields replaced with null). */
 type DraftValues = Omit<FormValues, "passportPhoto" | "signature"> & {
   passportPhoto: null;
   signature: null;
@@ -127,7 +120,7 @@ function saveDraft(values: FormValues): void {
     };
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
   } catch {
-    // Silently ignore — storage may be full or unavailable.
+    // Silently ignore
   }
 }
 
@@ -148,8 +141,6 @@ function clearDraft(): void {
     // ignore
   }
 }
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const STEPS = [
   { id: 1, label: "Personal Info", icon: User },
@@ -223,8 +214,6 @@ const NIGERIAN_STATES = [
   "Yobe",
   "Zamfara",
 ];
-
-// ─── Validation schemas per step ──────────────────────────────────────────────
 
 const phoneRegex = /^\+?[0-9\s\-()]{7,15}$/;
 
@@ -338,8 +327,6 @@ const step4Schema = Yup.object({
 
 const stepSchemas = [step1Schema, step2Schema, step3Schema, step4Schema];
 
-// ─── Supabase submission ──────────────────────────────────────────────────────
-
 async function uploadFile(
   supabase: ReturnType<typeof createClient>,
   bucket: string,
@@ -385,7 +372,6 @@ async function submitVerification(
       : Promise.resolve(""),
   ]);
 
-  // Build investment plan payload for transactions and profiles
   const investmentPlanPayload: Record<string, unknown> = {
     plan: values.investmentPlan,
     ...(values.investmentPlan === "premium_plus" && {
@@ -458,7 +444,6 @@ async function submitVerification(
     },
   };
 
-  // 1. Fetch current compliance to preserve existing investment plans
   const { data: profile, error: fetchErr } = await supabase
     .from("profiles")
     .select("compliance")
@@ -477,12 +462,11 @@ async function submitVerification(
 
   const updatedCompliance = {
     ...(profile?.compliance ?? {}),
-    ...compliance, // Merge new compliance data
+    ...compliance,
     investment_plans: [...existingPlans, investmentPlanPayload],
-    investment_plan: investmentPlanPayload, // Keep for backward compatibility
+    investment_plan: investmentPlanPayload,
   };
 
-  // 2. Update profile with compliance data
   const { error: updateErr } = await supabase
     .from("profiles")
     .update({
@@ -535,8 +519,6 @@ async function submitVerification(
   return { uid, email: user.email ?? values.email };
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
 const labelCls =
   "text-[0.72rem] font-medium uppercase tracking-widest text-muted-foreground mb-1.5 block";
 const inputCls = "h-10 text-sm w-full";
@@ -568,8 +550,6 @@ function FieldGroup({
     </div>
   );
 }
-
-// ─── Step field maps ──────────────────────────────────────────────────────────
 
 function getStepFields(step: number): (keyof FormValues)[] {
   if (step === 1)
@@ -636,14 +616,10 @@ const ALL_PLAN_SUBFIELDS: (keyof FormValues)[] = [
   "reifModeOfInterest",
 ];
 
-// ─── Step props type ──────────────────────────────────────────────────────────
-
 interface StepProps {
   formik: ReturnType<typeof useFormik<FormValues>>;
   fieldError: (name: keyof FormValues) => string | undefined;
 }
-
-// ─── Build initial values, merging localStorage draft ─────────────────────────
 
 function buildInitialValues(
   prefillEmail: string,
@@ -694,22 +670,15 @@ function buildInitialValues(
   const draft = loadDraft();
   if (!draft) return base;
 
-  // Merge draft into base, skipping File fields (always null from draft)
-  // and always overriding email with the live prefill value.
   return {
     ...base,
     ...draft,
-    // File fields are never restored from localStorage
     passportPhoto: null,
     signature: null,
-    // Always trust the live prefill values from auth
     email: prefillEmail,
     phone: draft.phone || prefillPhone,
   };
 }
-
-// ─── Draft-restored step indicator ────────────────────────────────────────────
-// Small banner shown when a saved draft was detected on mount.
 
 function DraftRestoredBanner({ onDismiss }: { onDismiss: () => void }) {
   return (
@@ -734,7 +703,6 @@ function DraftRestoredBanner({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
-// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function VerificationForm({
   prefillEmail,
@@ -751,7 +719,6 @@ export default function VerificationForm({
   } | null>(null);
   const [metamapDone, setMetamapDone] = React.useState(false);
 
-  // Whether a draft was found and loaded on initial mount
   const [draftRestored, setDraftRestored] = React.useState(false);
   const [bannerVisible, setBannerVisible] = React.useState(false);
 
@@ -760,7 +727,6 @@ export default function VerificationForm({
     stepRef.current = step;
   }, [step]);
 
-  // ── MetaMap SDK event listeners ─────────────────────────────────────────────
   React.useEffect(() => {
     const onFinished = () => setMetamapDone(true);
     const onExited = () => setMetamapDone(true);
@@ -772,8 +738,6 @@ export default function VerificationForm({
     };
   }, []);
 
-  // ── Detect draft on mount ────────────────────────────────────────────────────
-  // We check once synchronously via buildInitialValues, then flag if a draft existed.
   const hasDraft = React.useMemo(() => loadDraft() !== null, []);
 
   React.useEffect(() => {
@@ -784,7 +748,6 @@ export default function VerificationForm({
   }, [hasDraft]);
 
   const formik = useFormik<FormValues>({
-    // Initial values are seeded from localStorage draft (if present)
     initialValues: buildInitialValues(prefillEmail, prefillPhone),
     validate: async (values) => {
       try {
@@ -807,7 +770,6 @@ export default function VerificationForm({
     onSubmit: async (values, { setStatus }) => {
       try {
         const result = await submitVerification(values);
-        // Clear the draft once the form is successfully submitted
         clearDraft();
         setVerifiedUser(result);
       } catch (err) {
@@ -820,11 +782,8 @@ export default function VerificationForm({
     },
   });
 
-  // ── Auto-save draft on every values change ───────────────────────────────────
-  // Debounced to avoid thrashing localStorage on every keystroke.
   const saveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   React.useEffect(() => {
-    // Don't save if the form was already submitted (verifiedUser is set)
     if (verifiedUser) return;
 
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -836,8 +795,6 @@ export default function VerificationForm({
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
   }, [formik.values, verifiedUser]);
-
-  // ── Next / submit handlers ───────────────────────────────────────────────────
 
   const handleNext = async () => {
     setAttempted(true);
@@ -902,13 +859,9 @@ export default function VerificationForm({
     return undefined;
   };
 
-  // ── Post-submission screens ──────────────────────────────────────────────────
-
   if (verifiedUser && metamapDone) return <AllDoneScreen />;
   if (verifiedUser)
     return <MetamapScreen uid={verifiedUser.uid} email={verifiedUser.email} />;
-
-  // ── Multi-step form ──────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-dvh bg-background">

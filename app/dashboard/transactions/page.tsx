@@ -1,7 +1,6 @@
 import InvestmentDetailsAdmin from "@/components/custom/investments/InvestmentDetailsAdmin";
 import UserTransactions from "@/components/custom/transactions/UserTransactions";
 import { createClient } from "@/lib/supabase/server";
-import React from "react";
 
 const transactions = async () => {
   const supabase = await createClient();

@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
   TrendingUp,
-  TrendingDown,
   Wallet,
   Clock,
   Calendar,
@@ -14,15 +13,12 @@ import {
   ChevronDown,
   ArrowUpRight,
   PiggyBank,
-  Landmark,
   BarChart3,
   Layers,
   Info,
   Target,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface InvestmentPlan {
   plan: string;
@@ -38,8 +34,6 @@ interface InvestmentPlan {
   mode_of_interest?: string;
   units?: number;
 }
-
-// ─── Constants ────────────────────────────────────────────────────────────────
 
 const PLAN_META: Record<
   string,
@@ -124,9 +118,13 @@ const getDaysRemaining = (inv: InvestmentPlan): number => {
   return Math.max(0, Math.ceil((maturity.getTime() - Date.now()) / 86_400_000));
 };
 
-// ─── Animated counter ─────────────────────────────────────────────────────────
-
-function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: string }) {
+function AnimatedNumber({
+  value,
+  prefix = "₦",
+}: {
+  value: number;
+  prefix?: string;
+}) {
   const [display, setDisplay] = useState(0);
   const raf = useRef<number>(0);
 
@@ -144,7 +142,6 @@ function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: str
 
     raf.current = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   return (
@@ -154,8 +151,6 @@ function AnimatedNumber({ value, prefix = "₦" }: { value: number; prefix?: str
     </span>
   );
 }
-
-// ─── Radial progress ring ─────────────────────────────────────────────────────
 
 function RadialProgress({
   percent,
@@ -172,7 +167,14 @@ function RadialProgress({
 
   return (
     <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f4f4f5" strokeWidth={6} />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke="#f4f4f5"
+        strokeWidth={6}
+      />
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -188,8 +190,6 @@ function RadialProgress({
     </svg>
   );
 }
-
-// ─── Plan card ────────────────────────────────────────────────────────────────
 
 function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
   const [expanded, setExpanded] = useState(false);
@@ -224,7 +224,9 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <p className="text-sm font-bold text-zinc-900">{meta.label} Plan</p>
+                <p className="text-sm font-bold text-zinc-900">
+                  {meta.label} Plan
+                </p>
                 <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
                   <BadgeCheck className="size-3" />
                   Active
@@ -260,11 +262,20 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
           </div>
           <div className="flex justify-between mt-1">
             <span className="text-[10px] text-zinc-400">
-              Started {new Date(inv.monthly_payment_date).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })}
+              Started{" "}
+              {new Date(inv.monthly_payment_date).toLocaleDateString("en-NG", {
+                day: "numeric",
+                month: "short",
+                year: "numeric",
+              })}
             </span>
             <span className="text-[10px] text-zinc-400">
               {maturity
-                ? maturity.toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" })
+                ? maturity.toLocaleDateString("en-NG", {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })
                 : "N/A"}
             </span>
           </div>
@@ -294,13 +305,17 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
         </div>
 
         {/* Projected return highlight */}
-        <div className={`rounded-xl bg-linear-to-r ${meta.gradient} p-3 text-white`}>
+        <div
+          className={`rounded-xl bg-linear-to-r ${meta.gradient} p-3 text-white`}
+        >
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70">
                 Projected Return at Maturity
               </p>
-              <p className="text-lg font-black tabular-nums mt-0.5">{fmt(projected)}</p>
+              <p className="text-lg font-black tabular-nums mt-0.5">
+                {fmt(projected)}
+              </p>
             </div>
             <div className="text-right">
               <p className="text-[10px] text-white/70">Expected Gain</p>
@@ -326,20 +341,42 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
         {expanded && (
           <div className="mt-2 space-y-2 border-t border-zinc-100 pt-3">
             {[
-              { label: "Payment Date", value: new Date(inv.monthly_payment_date).toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" }) },
-              inv.mode_of_payment && { label: "Mode of Payment", value: inv.mode_of_payment },
-              inv.mode_of_interest && { label: "Interest Repayment", value: inv.mode_of_interest },
+              {
+                label: "Payment Date",
+                value: new Date(inv.monthly_payment_date).toLocaleDateString(
+                  "en-NG",
+                  { day: "numeric", month: "long", year: "numeric" },
+                ),
+              },
+              inv.mode_of_payment && {
+                label: "Mode of Payment",
+                value: inv.mode_of_payment,
+              },
+              inv.mode_of_interest && {
+                label: "Interest Repayment",
+                value: inv.mode_of_interest,
+              },
               inv.units && { label: "Units", value: `${inv.units} units` },
-              (inv.monthly_amount_words ?? inv.amount_words ?? inv.total_words) && {
+              (inv.monthly_amount_words ??
+                inv.amount_words ??
+                inv.total_words) && {
                 label: "Amount in Words",
-                value: inv.monthly_amount_words ?? inv.amount_words ?? inv.total_words,
+                value:
+                  inv.monthly_amount_words ??
+                  inv.amount_words ??
+                  inv.total_words,
               },
             ]
               .filter(Boolean)
               .map((row: any) => (
-                <div key={row.label} className="flex items-center justify-between">
+                <div
+                  key={row.label}
+                  className="flex items-center justify-between"
+                >
                   <span className="text-xs text-zinc-400">{row.label}</span>
-                  <span className="text-xs font-semibold text-zinc-700 capitalize">{row.value}</span>
+                  <span className="text-xs font-semibold text-zinc-700 capitalize">
+                    {row.value}
+                  </span>
                 </div>
               ))}
           </div>
@@ -348,8 +385,6 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
     </div>
   );
 }
-
-// ─── Allocation donut (pure SVG) ──────────────────────────────────────────────
 
 function DonutChart({ plans }: { plans: InvestmentPlan[] }) {
   const total = plans.reduce((s, p) => s + getPrincipal(p), 0);
@@ -370,9 +405,19 @@ function DonutChart({ plans }: { plans: InvestmentPlan[] }) {
   });
 
   return (
-    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+    <div
+      className="relative flex items-center justify-center"
+      style={{ width: size, height: size }}
+    >
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#f4f4f5" strokeWidth={18} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          fill="none"
+          stroke="#f4f4f5"
+          strokeWidth={18}
+        />
         {segments.map((seg, i) => (
           <circle
             key={i}
@@ -385,19 +430,23 @@ function DonutChart({ plans }: { plans: InvestmentPlan[] }) {
             strokeDasharray={`${circ * seg.pct} ${circ * (1 - seg.pct)}`}
             strokeDashoffset={-circ * seg.offset}
             strokeLinecap="butt"
-            style={{ transition: "stroke-dasharray 1s cubic-bezier(0.4,0,0.2,1)" }}
+            style={{
+              transition: "stroke-dasharray 1s cubic-bezier(0.4,0,0.2,1)",
+            }}
           />
         ))}
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Total</p>
-        <p className="text-sm font-black text-zinc-900 tabular-nums">{fmtShort(total)}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+          Total
+        </p>
+        <p className="text-sm font-black text-zinc-900 tabular-nums">
+          {fmtShort(total)}
+        </p>
       </div>
     </div>
   );
 }
-
-// ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function UserPortfolio() {
   const [plans, setPlans] = useState<InvestmentPlan[]>([]);
@@ -408,7 +457,9 @@ export default function UserPortfolio() {
     (async () => {
       try {
         const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
         if (!user) return;
 
         const { data } = await supabase
@@ -421,8 +472,8 @@ export default function UserPortfolio() {
         const ips: InvestmentPlan[] = c?.investment_plans?.length
           ? c.investment_plans
           : c?.investment_plan
-          ? [c.investment_plan]
-          : [];
+            ? [c.investment_plan]
+            : [];
         setPlans(ips);
       } finally {
         setLoading(false);
@@ -435,11 +486,11 @@ export default function UserPortfolio() {
   const totalGain = totalProjected - totalPrincipal;
   const avgRate =
     plans.length > 0
-      ? plans.reduce((s, p) => s + (PLAN_META[p.plan]?.rate ?? 0.15), 0) / plans.length
+      ? plans.reduce((s, p) => s + (PLAN_META[p.plan]?.rate ?? 0.15), 0) /
+        plans.length
       : 0;
 
-  const filtered =
-    tab === "all" ? plans : plans.filter((p) => p.plan === tab);
+  const filtered = tab === "all" ? plans : plans.filter((p) => p.plan === tab);
 
   const planTypes = Array.from(new Set(plans.map((p) => p.plan)));
 
@@ -458,8 +509,12 @@ export default function UserPortfolio() {
           <BarChart3 className="size-7 text-zinc-400" />
         </div>
         <div>
-          <p className="text-base font-bold text-zinc-900">No investments yet</p>
-          <p className="text-sm text-zinc-500 mt-1">Add your first plan to see your portfolio here.</p>
+          <p className="text-base font-bold text-zinc-900">
+            No investments yet
+          </p>
+          <p className="text-sm text-zinc-500 mt-1">
+            Add your first plan to see your portfolio here.
+          </p>
         </div>
       </div>
     );
@@ -511,13 +566,17 @@ export default function UserPortfolio() {
             key={s.label}
             className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm"
           >
-            <div className={`mb-2 flex size-8 items-center justify-center rounded-lg ${s.bg} ${s.color}`}>
+            <div
+              className={`mb-2 flex size-8 items-center justify-center rounded-lg ${s.bg} ${s.color}`}
+            >
               {s.icon}
             </div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               {s.label}
             </p>
-            <p className={`mt-1 text-lg font-black tabular-nums ${s.color}`}>{s.value}</p>
+            <p className={`mt-1 text-lg font-black tabular-nums ${s.color}`}>
+              {s.value}
+            </p>
           </div>
         ))}
       </div>
@@ -528,7 +587,9 @@ export default function UserPortfolio() {
         <div className="rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <Layers className="size-4 text-zinc-400" />
-            <h3 className="text-sm font-bold text-zinc-900">Allocation Breakdown</h3>
+            <h3 className="text-sm font-bold text-zinc-900">
+              Allocation Breakdown
+            </h3>
           </div>
           <div className="flex items-center gap-6">
             <DonutChart plans={plans} />
@@ -537,16 +598,24 @@ export default function UserPortfolio() {
                 const key = inv.plan.toLowerCase();
                 const meta = PLAN_META[key] ?? PLAN_META.premium;
                 const principal = getPrincipal(inv);
-                const pct = totalPrincipal > 0 ? ((principal / totalPrincipal) * 100).toFixed(1) : "0";
+                const pct =
+                  totalPrincipal > 0
+                    ? ((principal / totalPrincipal) * 100).toFixed(1)
+                    : "0";
                 return (
-                  <div key={key + inv.monthly_payment_date} className="flex items-center gap-2.5">
+                  <div
+                    key={key + inv.monthly_payment_date}
+                    className="flex items-center gap-2.5"
+                  >
                     <div
                       className="size-2.5 shrink-0 rounded-full"
                       style={{ backgroundColor: meta.color }}
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
-                        <p className="text-xs font-semibold text-zinc-700">{meta.label}</p>
+                        <p className="text-xs font-semibold text-zinc-700">
+                          {meta.label}
+                        </p>
                         <p className="text-xs font-bold text-zinc-900 tabular-nums">
                           {pct}%
                         </p>
@@ -554,10 +623,15 @@ export default function UserPortfolio() {
                       <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-zinc-100">
                         <div
                           className="h-full rounded-full transition-all duration-700"
-                          style={{ width: `${pct}%`, backgroundColor: meta.color }}
+                          style={{
+                            width: `${pct}%`,
+                            backgroundColor: meta.color,
+                          }}
                         />
                       </div>
-                      <p className="mt-0.5 text-[10px] text-zinc-400">{fmtShort(principal)}</p>
+                      <p className="mt-0.5 text-[10px] text-zinc-400">
+                        {fmtShort(principal)}
+                      </p>
                     </div>
                   </div>
                 );
@@ -570,7 +644,9 @@ export default function UserPortfolio() {
         <div className="rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
           <div className="flex items-center gap-2 mb-4">
             <Calendar className="size-4 text-zinc-400" />
-            <h3 className="text-sm font-bold text-zinc-900">Maturity Timeline</h3>
+            <h3 className="text-sm font-bold text-zinc-900">
+              Maturity Timeline
+            </h3>
           </div>
           <div className="space-y-4">
             {plans.map((inv, i) => {
@@ -584,17 +660,26 @@ export default function UserPortfolio() {
               return (
                 <div key={i} className="flex items-center gap-3">
                   <div className="relative shrink-0">
-                    <RadialProgress percent={progress} color={meta.color} size={52} />
+                    <RadialProgress
+                      percent={progress}
+                      color={meta.color}
+                      size={52}
+                    />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <Icon className="size-4" style={{ color: meta.color }} />
                     </div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-zinc-800">{meta.label}</p>
+                      <p className="text-xs font-bold text-zinc-800">
+                        {meta.label}
+                      </p>
                       <span
                         className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                        style={{ backgroundColor: `${meta.color}18`, color: meta.color }}
+                        style={{
+                          backgroundColor: `${meta.color}18`,
+                          color: meta.color,
+                        }}
                       >
                         {daysLeft > 0 ? `${daysLeft} days left` : "Matured"}
                       </span>
@@ -602,13 +687,20 @@ export default function UserPortfolio() {
                     <p className="text-[10px] text-zinc-400 mt-0.5">
                       Matures{" "}
                       {maturity
-                        ? maturity.toLocaleDateString("en-NG", { day: "numeric", month: "long", year: "numeric" })
+                        ? maturity.toLocaleDateString("en-NG", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })
                         : "N/A"}
                     </p>
                     <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-zinc-100">
                       <div
                         className="h-full rounded-full transition-all duration-700"
-                        style={{ width: `${progress}%`, backgroundColor: meta.color }}
+                        style={{
+                          width: `${progress}%`,
+                          backgroundColor: meta.color,
+                        }}
                       />
                     </div>
                   </div>
@@ -636,14 +728,20 @@ export default function UserPortfolio() {
             const principal = getPrincipal(inv);
             const projected = getProjectedReturn(inv);
             const gain = projected - principal;
-            const gainPct = principal > 0 ? ((gain / principal) * 100).toFixed(1) : "0";
-            const barWidth = totalPrincipal > 0 ? (principal / totalPrincipal) * 100 : 0;
+            const gainPct =
+              principal > 0 ? ((gain / principal) * 100).toFixed(1) : "0";
+            const barWidth =
+              totalPrincipal > 0 ? (principal / totalPrincipal) * 100 : 0;
 
             return (
               <div key={i} className="flex items-center gap-4">
                 <div className="w-24 shrink-0">
-                  <p className="text-xs font-semibold text-zinc-700">{meta.label}</p>
-                  <p className="text-[10px] text-zinc-400">{fmtShort(principal)}</p>
+                  <p className="text-xs font-semibold text-zinc-700">
+                    {meta.label}
+                  </p>
+                  <p className="text-[10px] text-zinc-400">
+                    {fmtShort(principal)}
+                  </p>
                 </div>
                 <div className="flex-1">
                   <div className="relative h-8 overflow-hidden rounded-lg bg-zinc-100">
@@ -665,7 +763,10 @@ export default function UserPortfolio() {
                       }}
                     />
                     <div className="absolute inset-0 flex items-center px-3">
-                      <span className="text-[10px] font-bold" style={{ color: meta.color }}>
+                      <span
+                        className="text-[10px] font-bold"
+                        style={{ color: meta.color }}
+                      >
                         +{fmtShort(gain)} ({gainPct}%)
                       </span>
                     </div>
@@ -690,7 +791,9 @@ export default function UserPortfolio() {
           <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1">
             {["all", ...planTypes].map((t) => {
               const label =
-                t === "all" ? `All Plans (${plans.length})` : PLAN_META[t]?.label ?? t;
+                t === "all"
+                  ? `All Plans (${plans.length})`
+                  : (PLAN_META[t]?.label ?? t);
               return (
                 <button
                   key={t}

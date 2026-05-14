@@ -7,7 +7,6 @@ import {
   BadgeCheck,
   ChevronRight,
   Loader2,
-  Sparkles,
 } from "lucide-react";
 import BankDetailsDisplay from "../BankDetailsDisplay";
 
@@ -483,8 +482,6 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
     </div>
   );
 }
-
-// ─── Small form helpers ───────────────────────────────────────────────────────
 
 function Field({
   label,

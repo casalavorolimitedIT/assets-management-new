@@ -416,8 +416,7 @@ const AdminDashboard = () => {
           return (
             <div
               key={user.id}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 hover:border-violet-200 transition-colors cursor-pointer active:scale-[0.99]"
-              onClick={() => setSelected(user)}
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer active:scale-[0.99]"
             >
               {/* Avatar */}
               <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
@@ -448,8 +447,6 @@ const AdminDashboard = () => {
                   </p>
                 )}
               </div>
-
-              <ChevronRight size={16} className="text-gray-300 shrink-0" />
             </div>
           );
         })}

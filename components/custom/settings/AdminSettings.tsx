@@ -121,7 +121,7 @@ const PasswordField = ({
   );
 };
 
-const Settings = () => {
+const AdminSettings = () => {
   const [userData, setUserData] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -314,18 +314,9 @@ const Settings = () => {
 
   if (!userData) return null;
 
-  const compliance = userData.compliance ?? {};
-  const bio_data = compliance.bio_data ?? {};
-  const bank_details = compliance.bank_details ?? {};
-  const personal_info = compliance.personal_info ?? {};
-
-  const fullName =
-    [userData.title, userData.first_name, userData.last_name]
-      .filter(Boolean)
-      .join(" ") || "Unknown User";
-
-  const initials =
-    (userData.first_name?.[0] ?? "") + (userData.last_name?.[0] ?? "") || "?";
+  const { compliance } = userData;
+  const fullName = `${userData.title} ${userData.first_name} ${userData.last_name}`;
+  const initials = `${userData.first_name[0]}${userData.last_name[0]}`;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -344,17 +335,6 @@ const Settings = () => {
               </p>
               <p className="text-sm text-gray-500 truncate">{userData.email}</p>
               <div className="flex items-center gap-2 mt-1.5">
-                {userData.metamap_status === null ? (
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-700 bg-yellow-50 px-2 py-0.5 rounded-full">
-                    <Clock size={11} />
-                    Pending verification
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                    <CheckCircle2 size={11} />
-                    Verified
-                  </span>
-                )}
                 <span className="inline-flex items-center text-xs font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full">
                   {userData.role}
                 </span>
@@ -364,7 +344,7 @@ const Settings = () => {
           <Row
             icon={<Phone size={15} />}
             label="Phone"
-            value={userData.phone || "N/A"}
+            value={userData.phone}
           />
           <Row
             icon={<Calendar size={15} />}
@@ -376,130 +356,6 @@ const Settings = () => {
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
           Your details
         </p>
-
-        <SectionCard
-          title="Personal details"
-          id="personal"
-          expanded={expanded}
-          onToggle={toggleSection}
-        >
-          <Row
-            icon={<User size={15} />}
-            label="Gender"
-            value={personal_info.gender || "N/A"}
-          />
-          <Row
-            icon={<Calendar size={15} />}
-            label="Date of birth"
-            value={formatDate(bio_data.date_of_birth) || "N/A"}
-          />
-          <Row
-            icon={<Flag size={15} />}
-            label="Nationality"
-            value={personal_info.nationality || "N/A"}
-          />
-          <Row
-            icon={<MapPin size={15} />}
-            label="State of origin"
-            value={capitalize(bio_data.state_of_origin) || "N/A"}
-          />
-          <Row
-            icon={<MapPin size={15} />}
-            label="LGA"
-            value={capitalize(bio_data.lga) || "N/A"}
-          />
-          <Row
-            icon={<BadgeCheck size={15} />}
-            label="Means of ID"
-            value={personal_info.means_of_id || "N/A"}
-          />
-          <Row
-            icon={<Hash size={15} />}
-            label="ID number"
-            value={personal_info.id_number || "N/A"}
-          />
-        </SectionCard>
-
-        <SectionCard
-          title="Employment"
-          id="employment"
-          expanded={expanded}
-          onToggle={toggleSection}
-        >
-          <Row
-            icon={<Briefcase size={15} />}
-            label="Employer"
-            value={personal_info.employer_name || "N/A"}
-          />
-          <Row
-            icon={<Briefcase size={15} />}
-            label="Job title"
-            value={personal_info.job_title || "N/A"}
-          />
-          <Row
-            icon={<Building size={15} />}
-            label="Office address"
-            value={personal_info.office_address || "N/A"}
-          />
-          <Row
-            icon={<CreditCard size={15} />}
-            label="Employment type"
-            value={
-              (Array.isArray(bio_data.employment_type)
-                ? bio_data.employment_type
-                : []
-              )
-                .map(capitalize)
-                .join(", ") || "—"
-            }
-          />
-        </SectionCard>
-
-        <SectionCard
-          title="Bank details"
-          id="bank"
-          expanded={expanded}
-          onToggle={toggleSection}
-        >
-          <Row
-            icon={<Building size={15} />}
-            label="Bank"
-            value={bank_details.bank_name || "N/A"}
-          />
-          <Row
-            icon={<User size={15} />}
-            label="Account name"
-            value={bank_details.account_name || "N/A"}
-          />
-          <Row
-            icon={<Hash size={15} />}
-            label="Account number"
-            value={bank_details.account_number || "N/A"}
-          />
-        </SectionCard>
-
-        <SectionCard
-          title="Next of kin"
-          id="nextOfKin"
-          expanded={expanded}
-          onToggle={toggleSection}
-        >
-          <Row
-            icon={<Heart size={15} />}
-            label="Name"
-            value={capitalize(bio_data.next_of_kin) || "N/A"}
-          />
-          <Row
-            icon={<Phone size={15} />}
-            label="Phone"
-            value={bio_data.next_of_kin_phone}
-          />
-          <Row
-            icon={<MapPin size={15} />}
-            label="Address"
-            value={capitalize(bio_data.next_of_kin_address) || "N/A"}
-          />
-        </SectionCard>
 
         {/* Security section */}
         <div className="mt-6">
@@ -603,4 +459,4 @@ const Settings = () => {
   );
 };
 
-export default Settings;
+export default AdminSettings;

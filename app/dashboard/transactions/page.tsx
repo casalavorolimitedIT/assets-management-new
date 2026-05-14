@@ -1,4 +1,4 @@
-import InvestmentDetailsAdmin from "@/components/custom/investments/InvestmentDetailsAdmin";
+import AdminTransactions from "@/components/custom/transactions/AdminTransactions";
 import UserTransactions from "@/components/custom/transactions/UserTransactions";
 import { isAdminRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
@@ -16,7 +16,7 @@ const transactions = async () => {
   return (
     <>
       {isAdminRole(profile?.role) ? (
-        <InvestmentDetailsAdmin profile={profile} />
+        <AdminTransactions />
       ) : (
         <UserTransactions />
       )}

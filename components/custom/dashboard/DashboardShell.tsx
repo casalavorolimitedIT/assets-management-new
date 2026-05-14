@@ -19,6 +19,7 @@ import {
   ChevronRight,
   ShieldCheck,
   Users,
+  Megaphone,
 } from "lucide-react";
 import { logout } from "@/app/(auth)/actions/auth-actions";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -47,6 +48,11 @@ const ADMIN_NAV_ITEMS = [
     label: "Transactions",
     href: "/dashboard/transactions",
     icon: ArrowLeftRight,
+  },
+  {
+    label: "Broadcast",
+    href: "/dashboard/broadcast",
+    icon: Megaphone,
   },
 ];
 

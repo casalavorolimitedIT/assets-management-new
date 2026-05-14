@@ -1,4 +1,4 @@
-import InvestmentDetailsAdmin from "@/components/custom/investments/InvestmentDetailsAdmin";
+import AdminSettings from "@/components/custom/settings/AdminSettings";
 import Settings from "@/components/custom/settings/Settings";
 import { isAdminRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
@@ -13,15 +13,7 @@ const settings = async () => {
     .eq("id", authData.user?.id)
     .single();
 
-  return (
-    <>
-      {isAdminRole(profile?.role) ? (
-        <InvestmentDetailsAdmin profile={profile} />
-      ) : (
-        <Settings />
-      )}
-    </>
-  );
+  return <>{isAdminRole(profile?.role) ? <AdminSettings /> : <Settings />}</>;
 };
 
 export default settings;

@@ -1,3 +1,5 @@
+import { FAQ } from "@/app/dashboard/help/page";
+
 export const sections = [
   {
     id: "obligations",
@@ -169,5 +171,111 @@ export const sections = [
     number: "15",
     title: "Dispute Resolution",
     body: "Any dispute arising out of or in connection to this Investment Agreement will to the extent possible be settled amicably by negotiation and discussion between the parties. Otherwise, such dispute will be settled by Mediation. The place of dispute resolution will be Abuja, or as may be agreed between the Parties.",
+  },
+];
+
+
+export const faqs: FAQ[] = [
+  {
+    category: "account",
+    section: "Your account",
+    q: "How do I update my personal information?",
+    a: "Your personal details such as name, phone number, and address are set during onboarding. To request a change, please contact our support team with your registered email and the details you'd like to update. Some fields may require re-verification.",
+  },
+  {
+    category: "account",
+    section: "Your account",
+    q: "What does my account role mean?",
+    a: "Your account is assigned the USER role by default. This gives you access to your investment dashboard, compliance details, and account settings. Admin roles are reserved for internal staff and are not user-assignable.",
+  },
+  {
+    category: "account",
+    section: "Your account",
+    q: "How do I delete my account?",
+    a: "You can permanently delete your account from the Settings page under the Danger Zone section. Tap Delete and confirm in the modal. This removes all your personal data, compliance records, and investment plans. This action cannot be reversed, so please make sure you've withdrawn or resolved any active investments before proceeding.",
+  },
+  {
+    category: "account",
+    section: "Your account",
+    q: "What happens to my data after I delete my account?",
+    a: "All your profile data, compliance records (bio data, personal info, bank details, and investment plans) are permanently deleted. We do not retain any personally identifiable information after account deletion, in line with our data privacy policy.",
+  },
+  {
+    category: "verification",
+    section: "Verification & compliance",
+    q: "What does 'Verified' mean on my profile?",
+    a: "A Verified badge means your identity and compliance documents have been reviewed and approved by our team. This includes your means of identification (e.g. NIN ID Card), passport photo, bio data, and personal information. Verified accounts have full access to investment plans.",
+  },
+  {
+    category: "verification",
+    section: "Verification & compliance",
+    q: "What documents are needed for verification?",
+    a: "Verification requires a valid means of identification (NIN ID Card, international passport, or driver's licence), a passport photograph, your date of birth, state of origin, LGA, and employment details. You'll also need to provide your next of kin information and bank account details.",
+  },
+  {
+    category: "verification",
+    section: "Verification & compliance",
+    q: "How long does verification take?",
+    a: "Verification is typically completed within 1–3 business days after you submit all required documents. You'll receive a notification once your account status is updated. If your verification is taking longer, please contact support with your registered email.",
+  },
+  {
+    category: "verification",
+    section: "Verification & compliance",
+    q: "Why do I need to provide next of kin information?",
+    a: "Next of kin details are required as part of our compliance process for investment accounts. In the event of an emergency or claim, we need a designated contact person. You'll need to provide their full name, phone number, and address.",
+  },
+  {
+    category: "investment",
+    section: "Investment plans",
+    q: "What is the REIF plan?",
+    a: "REIF (Real Estate Investment Fund) is one of our investment products. It allows you to invest in units of a real estate fund. Each unit is priced, and you select how many units you'd like to invest in. Returns are paid based on your chosen mode of interest — monthly, quarterly, or at maturity.",
+  },
+  {
+    category: "investment",
+    section: "Investment plans",
+    q: "How are investment returns paid?",
+    a: "Returns are paid based on your selected mode of interest. If you chose Monthly, interest is credited to your registered bank account on your monthly payment date. Ensure your bank details are up to date to avoid missed payments.",
+  },
+  {
+    category: "investment",
+    section: "Investment plans",
+    q: "Can I have multiple investment plans?",
+    a: "Yes. Your account supports multiple investment plans simultaneously. Each plan has its own tenor, unit count, and payment schedule. You can view all active plans from your investment dashboard.",
+  },
+  {
+    category: "investment",
+    section: "Investment plans",
+    q: "What does tenor mean?",
+    a: "Tenor is the duration of your investment — for example, 12 Months means your principal is locked in for one year. At the end of the tenor, your capital is returned along with any outstanding interest, depending on your chosen mode of interest.",
+  },
+  {
+    category: "bank",
+    section: "Bank & payments",
+    q: "How do I update my bank account details?",
+    a: "Bank details are submitted during compliance onboarding. To update them, contact our support team. Changes to bank details require re-verification for security purposes and may take 2–5 business days to process.",
+  },
+  {
+    category: "bank",
+    section: "Bank & payments",
+    q: "What payment methods are accepted?",
+    a: "We currently accept Cheque as a mode of payment for investment subscriptions. Bank transfers may be available depending on your plan. Your payment method is confirmed during the onboarding process and is shown in your investment plan details.",
+  },
+  {
+    category: "bank",
+    section: "Bank & payments",
+    q: "When will I receive my monthly interest payment?",
+    a: "Monthly interest is credited on your monthly payment date, as specified in your investment plan. This date is set when you subscribe to a plan and remains fixed for the duration of the tenor. If a payment date falls on a weekend or public holiday, it may be processed the next business day.",
+  },
+  {
+    category: "security",
+    section: "Security & privacy",
+    q: "How is my personal data protected?",
+    a: "Your data is stored securely and only accessible to authorised personnel. We use encrypted connections and follow data protection best practices. Sensitive fields like your ID number, signature, and passport photo are stored in a private, access-controlled storage bucket.",
+  },
+  {
+    category: "security",
+    section: "Security & privacy",
+    q: "I think my account has been compromised. What should I do?",
+    a: "If you suspect unauthorised access to your account, contact our support team immediately at your registered email address. We recommend changing your password right away. Do not share your login credentials or verification codes with anyone.",
   },
 ];

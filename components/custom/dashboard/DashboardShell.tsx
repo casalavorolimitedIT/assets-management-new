@@ -9,17 +9,14 @@ import {
   LayoutDashboard,
   TrendingUp,
   Wallet,
-  BarChart3,
   ArrowLeftRight,
   Settings,
   HelpCircle,
-  ShieldCheck,
   Menu,
   X,
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Bell,
 } from "lucide-react";
 import { logout } from "@/app/(auth)/actions/auth-actions";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -37,7 +34,7 @@ const NAV_ITEMS = [
 
 const SECONDARY_NAV = [
   { label: "Settings", href: "/dashboard/settings", icon: Settings },
-  { label: "Help", href: "#", icon: HelpCircle },
+  { label: "Help", href: "/dashboard/help", icon: HelpCircle },
 ];
 
 interface DashboardShellProps {
@@ -45,6 +42,7 @@ interface DashboardShellProps {
     id: string;
     name: string;
     email: string;
+    metamap_status: any;
     initials: string;
   };
   children: React.ReactNode;
@@ -56,20 +54,17 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  // Load collapsed state from localStorage on mount
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-collapsed");
     if (stored !== null) setSidebarCollapsed(stored === "true");
   }, []);
 
-  // Persist collapsed state
   const toggleCollapsed = () => {
     const next = !sidebarCollapsed;
     setSidebarCollapsed(next);
     localStorage.setItem("sidebar-collapsed", String(next));
   };
 
-  // Close mobile drawer on route change
   useEffect(() => {
     setSidebarOpen(false);
   }, [pathname]);
@@ -113,11 +108,6 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                 className="object-contain"
               />
             </Link>
-          )}
-          {sidebarCollapsed && (
-            <div className="mx-auto flex size-8 items-center justify-center rounded-lg bg-[#ff6900] text-white font-bold text-sm">
-              C
-            </div>
           )}
           {!isMobile && (
             <button
@@ -261,7 +251,9 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
             <div className="hidden sm:flex items-center gap-2 rounded-full bg-[#fff1e6] px-3 py-1.5 text-xs font-medium text-[#ff6900]">
               <div className="size-1.5 rounded-full bg-[#ff6900] animate-pulse" />
-              {status ? status : "Pending Verification"}
+              {user.metamap_status === null
+                ? "Pending Verification"
+                : "Verified"}
             </div>
           </div>
         </header>

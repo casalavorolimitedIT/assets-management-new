@@ -1,7 +1,6 @@
 import InvestmentDetailsAdmin from "@/components/custom/investments/InvestmentDetailsAdmin";
 import Settings from "@/components/custom/settings/Settings";
 import { createClient } from "@/lib/supabase/server";
-import React from "react";
 
 const settings = async () => {
   const supabase = await createClient();

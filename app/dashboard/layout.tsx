@@ -14,7 +14,7 @@ export default async function DashboardLayout({
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("first_name, last_name, email, title")
+    .select("first_name, last_name, email, title, metamap_status")
     .eq("id", authData.user?.id)
     .single();
 
@@ -26,11 +26,13 @@ export default async function DashboardLayout({
   return (
     <DashboardShell
       user={{
+        id: authData.user?.id ?? "",
         name: displayName,
         email: authData.user?.email ?? "",
+        metamap_status: profile?.metamap_status,
         initials:
           (profile?.first_name?.[0]?.toUpperCase() ?? "") +
-          (profile?.last_name?.[0]?.toUpperCase() ?? "") || "U",
+            (profile?.last_name?.[0]?.toUpperCase() ?? "") || "U",
       }}
     >
       {children}

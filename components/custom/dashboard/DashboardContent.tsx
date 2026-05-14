@@ -475,7 +475,7 @@ export function DashboardContent({
               <ArrowRight className="size-4 text-zinc-400 group-hover:text-[#ff6900] group-hover:translate-x-0.5 transition-all" />
             </Link>
 
-            {!profile.metamap_status && (
+            {!profile?.metamap_status && (
               <Link
                 href="/verification"
                 className="group flex items-center gap-3 rounded-xl border border-zinc-200 p-4 hover:border-[#ff6900]/40 hover:bg-[#fff1e6] transition-all duration-150"

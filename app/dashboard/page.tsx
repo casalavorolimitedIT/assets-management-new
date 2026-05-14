@@ -1,5 +1,7 @@
 import ComplianceCheck from "@/components/custom/ComplianceCheck";
+import AdminDashboard from "@/components/custom/dashboard/AdminDashboard";
 import { DashboardContent } from "@/components/custom/dashboard/DashboardContent";
+import { isAdminRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function DashboardPage() {
@@ -12,6 +14,7 @@ export default async function DashboardPage() {
     .eq("id", authData.user?.id)
     .single();
 
+  const isAdmin = isAdminRole(profile?.role);
   const isVerified = profile?.isVerified ?? false;
 
   const firstName =
@@ -19,13 +22,17 @@ export default async function DashboardPage() {
 
   return (
     <>
-      {!isVerified && <ComplianceCheck />}
-      <DashboardContent
-        firstName={firstName}
-        profile={profile}
-        compliance={profile?.compliance ?? null}
-        isVerified={isVerified}
-      />
+      {!isAdmin && !isVerified && <ComplianceCheck />}
+      {isAdmin ? (
+        <AdminDashboard />
+      ) : (
+        <DashboardContent
+          firstName={firstName}
+          profile={profile}
+          compliance={profile?.compliance ?? null}
+          isVerified={isVerified}
+        />
+      )}
     </>
   );
 }

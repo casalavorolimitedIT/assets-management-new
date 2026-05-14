@@ -1,5 +1,6 @@
 import InvestmentDetailsAdmin from "@/components/custom/investments/InvestmentDetailsAdmin";
 import Settings from "@/components/custom/settings/Settings";
+import { isAdminRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
 
 const settings = async () => {
@@ -14,10 +15,10 @@ const settings = async () => {
 
   return (
     <>
-      {profile.role === "USER" ? (
-        <Settings />
-      ) : (
+      {isAdminRole(profile?.role) ? (
         <InvestmentDetailsAdmin profile={profile} />
+      ) : (
+        <Settings />
       )}
     </>
   );

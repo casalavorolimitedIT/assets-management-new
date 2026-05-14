@@ -17,6 +17,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ShieldCheck,
+  Users,
 } from "lucide-react";
 import { logout } from "@/app/(auth)/actions/auth-actions";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -37,11 +39,23 @@ const SECONDARY_NAV = [
   { label: "Help", href: "/dashboard/help", icon: HelpCircle },
 ];
 
+const ADMIN_NAV_ITEMS = [
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Investors", href: "/dashboard/investments", icon: Users },
+  { label: "Portfolios", href: "/dashboard/portfolio", icon: Wallet },
+  {
+    label: "Transactions",
+    href: "/dashboard/transactions",
+    icon: ArrowLeftRight,
+  },
+];
+
 interface DashboardShellProps {
   user: {
     id: string;
     name: string;
     email: string;
+    role: "ADMIN" | "USER";
     metamap_status: any;
     initials: string;
   };
@@ -53,6 +67,8 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isAdmin = user.role === "ADMIN";
+  const navItems = isAdmin ? ADMIN_NAV_ITEMS : NAV_ITEMS;
 
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-collapsed");
@@ -138,7 +154,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
               Menu
             </p>
           )}
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.href);
             return (
@@ -217,6 +233,11 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
                   {user.name}
                 </p>
                 <p className="text-xs text-zinc-500 truncate">{user.email}</p>
+                {isAdmin && (
+                  <p className="mt-0.5 text-xs font-medium text-[#ff6900]">
+                    Admin
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -249,12 +270,19 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
           <div className="flex items-center gap-4 ml-auto">
             <NotificationDropdown userId={user.id} />
 
-            <div className="hidden sm:flex items-center gap-2 rounded-full bg-[#fff1e6] px-3 py-1.5 text-xs font-medium text-[#ff6900]">
-              <div className="size-1.5 rounded-full bg-[#ff6900] animate-pulse" />
-              {user.metamap_status === null
-                ? "Pending Verification"
-                : "Verified"}
-            </div>
+            {isAdmin ? (
+              <div className="hidden sm:flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700">
+                <ShieldCheck className="size-3.5 text-[#ff6900]" />
+                Admin
+              </div>
+            ) : (
+              <div className="hidden sm:flex items-center gap-2 rounded-full bg-[#fff1e6] px-3 py-1.5 text-xs font-medium text-[#ff6900]">
+                <div className="size-1.5 rounded-full bg-[#ff6900] animate-pulse" />
+                {user.metamap_status === null
+                  ? "Pending Verification"
+                  : "Verified"}
+              </div>
+            )}
           </div>
         </header>
 

@@ -254,6 +254,9 @@ const BroadcastPage = () => {
         {/* ── Page header ── */}
         <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b border-slate-200">
           <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#ff6900]">
+              Admin Broadcast
+            </p>
             <h1 className="text-2xl font-bold tracking-tight text-slate-900">
               Broadcast
             </h1>

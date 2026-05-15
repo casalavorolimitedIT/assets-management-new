@@ -379,6 +379,7 @@ export const DetailRow = ({
 
 const AdminDashboard = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [admins, setAdmins] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<
@@ -395,7 +396,25 @@ const AdminDashboard = () => {
         .select("*")
         .eq("role", "USER")
         .order("created_at", { ascending: false });
-      if (data) setUsers(data as UserProfile[]);
+      if (data) {
+        setUsers(data as UserProfile[]);
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const fetchAdmins = async () => {
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("role", "ADMIN")
+        .order("created_at", { ascending: false });
+      if (data) {
+        setAdmins(data as UserProfile[]);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -404,6 +423,7 @@ const AdminDashboard = () => {
 
   useEffect(() => {
     fetchUsers();
+    fetchAdmins();
   }, []);
 
   const handleRefresh = () => {
@@ -416,17 +436,28 @@ const AdminDashboard = () => {
     total: userList.length,
     verified: userList.filter((u) => u.metamap_status === "approved").length,
     pending: userList.filter((u) => u.metamap_status !== "approved").length,
-    admins: 0,
+    admins: admins.length,
     totalInvested: userList.reduce((sum, u) => {
       const c =
         typeof u.compliance === "string"
           ? JSON.parse(u.compliance ?? "{}")
           : u.compliance;
-      const plans: any[] =
-        c?.investment_plans ?? (c?.investment_plan ? [c.investment_plan] : []);
-      return (
-        sum + plans.reduce((s: number, p: any) => s + (p.total_figures ?? 0), 0)
-      );
+
+      const plans: any[] = c?.investment_plans ?? [];
+
+      const plansTotal = plans.reduce((s: number, p: any) => {
+        const amount = p.total_figures ?? p.monthly_amount_figures ?? 0;
+        return s + amount;
+      }, 0);
+
+      const legacyTotal =
+        !c?.investment_plans && c?.investment_plan
+          ? (c.investment_plan.total_figures ??
+            c.investment_plan.monthly_amount_figures ??
+            0)
+          : 0;
+
+      return sum + plansTotal + legacyTotal;
     }, 0),
     totalUnits: userList.reduce((sum, u) => {
       const c =
@@ -574,7 +605,8 @@ const AdminDashboard = () => {
             compliance?.investment_plans ??
             (compliance?.investment_plan ? [compliance.investment_plan] : []);
           const totalInvested = plans.reduce(
-            (s: number, p: any) => s + (p.total_figures ?? 0),
+            (s: number, p: any) =>
+              s + (p.total_figures ?? p.monthly_amount_figures ?? 0),
             0,
           );
 

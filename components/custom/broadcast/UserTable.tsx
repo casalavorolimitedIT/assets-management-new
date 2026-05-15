@@ -66,12 +66,6 @@ export function UserTable({
               >
                 Joined
               </th>
-              <th
-                scope="col"
-                className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden xl:table-cell"
-              >
-                Last active
-              </th>
             </tr>
           </thead>
           <tbody>
@@ -168,13 +162,6 @@ export function UserTable({
                     </td>
                     <td className="px-4 py-3.5 hidden lg:table-cell text-slate-500 text-xs">
                       {fmtDate(user.created_at)}
-                    </td>
-                    <td className="px-4 py-3.5 hidden xl:table-cell text-slate-500 text-xs">
-                      {user.last_sign_in_at ? (
-                        fmtDate(user.last_sign_in_at)
-                      ) : (
-                        <span className="text-slate-300">Never</span>
-                      )}
                     </td>
                   </tr>
                 );

@@ -2,7 +2,16 @@
 
 import React, { useRef, useEffect, useState } from "react";
 import Link from "next/link";
-import { Bell, Check, CheckCheck, Info, AlertTriangle, XCircle, Sparkles, Loader2 } from "lucide-react";
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Info,
+  AlertTriangle,
+  XCircle,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
 
@@ -35,18 +44,34 @@ const TYPE_CONFIG = {
 
 interface NotificationDropdownProps {
   userId: string;
+  /** Pass true if the current user has the admin role */
+  isAdmin?: boolean;
 }
 
-export function NotificationDropdown({ userId }: NotificationDropdownProps) {
+export function NotificationDropdown({
+  userId,
+  isAdmin = false,
+}: NotificationDropdownProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const { notifications, loading, unreadCount, markAsRead, markAllAsRead } =
+  const { notifications, loading, markAsRead, markAllAsRead } =
     useNotifications(userId);
+  const visibleNotifications = notifications.filter((n: Notification) => {
+    if (n.forAdmin === true) return isAdmin;
+    if (n.forAdmin === false) return !isAdmin;
+    return true;
+  });
 
-  // Close on outside click
+  const unreadCount = visibleNotifications.filter(
+    (n: Notification) => !n.read,
+  ).length;
+
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
         setOpen(false);
       }
     }
@@ -91,7 +116,9 @@ export function NotificationDropdown({ userId }: NotificationDropdownProps) {
           {/* Header */}
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-zinc-900">Notifications</h3>
+              <h3 className="text-sm font-semibold text-zinc-900">
+                Notifications
+              </h3>
               {unreadCount > 0 && (
                 <span className="rounded-full bg-[#fff1e6] px-1.5 py-0.5 text-[10px] font-semibold text-[#ff6900]">
                   {unreadCount} new
@@ -115,16 +142,18 @@ export function NotificationDropdown({ userId }: NotificationDropdownProps) {
               <div className="flex items-center justify-center py-10">
                 <Loader2 className="size-5 animate-spin text-zinc-400" />
               </div>
-            ) : notifications.length === 0 ? (
+            ) : visibleNotifications.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
                 <div className="size-10 rounded-full bg-zinc-100 flex items-center justify-center">
                   <Bell className="size-5 text-zinc-400" />
                 </div>
-                <p className="text-sm font-medium text-zinc-500">All caught up!</p>
+                <p className="text-sm font-medium text-zinc-500">
+                  All caught up!
+                </p>
                 <p className="text-xs text-zinc-400">No notifications yet</p>
               </div>
             ) : (
-              notifications.map((n: any) => (
+              visibleNotifications.map((n: Notification) => (
                 <NotificationItem
                   key={n.id}
                   notification={n}
@@ -134,19 +163,6 @@ export function NotificationDropdown({ userId }: NotificationDropdownProps) {
               ))
             )}
           </div>
-
-          {/* Footer */}
-          {notifications.length > 0 && (
-            <div className="border-t border-zinc-100 px-4 py-2.5">
-              <Link
-                href="/dashboard/notifications"
-                onClick={() => setOpen(false)}
-                className="block text-center text-xs font-medium text-zinc-500 hover:text-zinc-900 transition-colors"
-              >
-                View all notifications
-              </Link>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -178,18 +194,24 @@ function NotificationItem({
       onClick={handleClick}
     >
       {/* Icon */}
-      <div className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${config.bg}`}>
+      <div
+        className={`mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ${config.bg}`}
+      >
         <Icon className={`size-4 ${config.iconColor}`} />
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
-          <p className={`text-sm font-medium leading-snug ${n.read ? "text-zinc-600" : "text-zinc-900"}`}>
+          <p
+            className={`text-sm font-medium leading-snug ${n.read ? "text-zinc-600" : "text-zinc-900"}`}
+          >
             {n.title}
           </p>
           {!n.read && (
-            <span className={`mt-1 size-2 shrink-0 rounded-full ${config.dot}`} />
+            <span
+              className={`mt-1 size-2 shrink-0 rounded-full ${config.dot}`}
+            />
           )}
         </div>
         <p className="mt-0.5 text-xs text-zinc-500 line-clamp-2">{n.message}</p>

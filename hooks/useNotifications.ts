@@ -11,6 +11,7 @@ export interface Notification {
   type: "info" | "success" | "warning" | "error";
   read: boolean;
   created_at: string;
+  forAdmin: boolean | null;
   href?: string;
 }
 

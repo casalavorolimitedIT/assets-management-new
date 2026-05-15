@@ -444,7 +444,7 @@ export function DashboardContent({
           </h2>
           <div className="space-y-3">
             <Link
-              href="/verification"
+              href="/dashboard/investments"
               className="group flex items-center gap-3 rounded-xl border border-zinc-200 p-4 hover:border-[#ff6900]/40 hover:bg-[#fff1e6] transition-all duration-150"
             >
               <div className="flex size-9 items-center justify-center rounded-lg bg-[#fff1e6] text-[#ff6900] group-hover:bg-[#ff6900] group-hover:text-white transition-colors">
@@ -468,9 +468,9 @@ export function DashboardContent({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-zinc-900">
-                  Fund Account
+                  Account Details
                 </p>
-                <p className="text-xs text-zinc-500">Top up your balance</p>
+                <p className="text-xs text-zinc-500">View your recent transactions</p>
               </div>
               <ArrowRight className="size-4 text-zinc-400 group-hover:text-[#ff6900] group-hover:translate-x-0.5 transition-all" />
             </Link>

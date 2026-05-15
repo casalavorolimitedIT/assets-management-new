@@ -22,3 +22,19 @@ export const planColor: Record<string, string> = {
   reif: "bg-violet-100 text-violet-700",
   default: "bg-gray-100 text-gray-600",
 };
+
+
+export function getInitials(user: any) {
+  const first = user.first_name?.[0] ?? "";
+  const last = user.last_name?.[0] ?? "";
+  return (first + last).toUpperCase() || user.email.slice(0, 2).toUpperCase();
+}
+
+
+export function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}

@@ -7,11 +7,12 @@ import {
   Clock,
   XCircle,
   Banknote,
-  ChevronRight,
   Search,
   RefreshCw,
   BarChart3,
   Cake,
+  CalendarClock,
+  TrendingUp,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { UserProfile } from "@/types";
@@ -27,6 +28,8 @@ interface Stats {
   totalInvested: number;
   totalUnits: number;
 }
+
+// ─── Birthday helpers ──────────────────────────────────────────────────────
 
 interface BirthdayEntry {
   name: string;
@@ -62,7 +65,6 @@ function getUpcomingBirthdays(
     const dobDate = new Date(dob);
     if (isNaN(dobDate.getTime())) continue;
 
-    // Next birthday this year or next
     const nextBirthday = new Date(
       today.getFullYear(),
       dobDate.getMonth(),
@@ -94,16 +96,97 @@ function formatBirthdayDate(dob: string): string {
   return d.toLocaleDateString("en-NG", { day: "numeric", month: "long" });
 }
 
+// ─── Payout helpers ────────────────────────────────────────────────────────
+
+interface PayoutEntry {
+  name: string;
+  email: string;
+  phone: string;
+  planName: string;
+  payoutDate: string;
+  payoutAmount: number;
+  units: number;
+  daysUntil: number;
+}
+
+function getUpcomingPayouts(
+  users: UserProfile[],
+  withinDays = 60,
+): PayoutEntry[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const results: PayoutEntry[] = [];
+
+  for (const user of users) {
+    const compliance =
+      typeof user.compliance === "string"
+        ? (() => {
+            try {
+              return JSON.parse(user.compliance);
+            } catch {
+              return null;
+            }
+          })()
+        : user.compliance;
+
+    if (!compliance) continue;
+
+    const plans: any[] =
+      compliance.investment_plans ??
+      (compliance.investment_plan ? [compliance.investment_plan] : []);
+
+    for (const plan of plans) {
+      // Support payout_date, maturity_date, or end_date field names
+      const rawDate =
+        plan.payout_date ?? plan.maturity_date ?? plan.end_date ?? null;
+      if (!rawDate) continue;
+
+      const payoutDate = new Date(rawDate);
+      if (isNaN(payoutDate.getTime())) continue;
+
+      const daysUntil = Math.round(
+        (payoutDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
+      );
+      if (daysUntil < 0 || daysUntil > withinDays) continue;
+
+      results.push({
+        name: `${user.title ?? ""} ${user.first_name} ${user.last_name}`.trim(),
+        email: user.email,
+        phone: user.phone,
+        planName: plan.plan_name ?? plan.name ?? "Investment Plan",
+        payoutDate: rawDate,
+        payoutAmount:
+          plan.payout_amount ?? plan.returns ?? plan.total_figures ?? 0,
+        units: plan.units ?? 0,
+        daysUntil,
+      });
+    }
+  }
+
+  return results.sort((a, b) => a.daysUntil - b.daysUntil);
+}
+
+function formatPayoutDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+// ─── Components ────────────────────────────────────────────────────────────
+
 const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
   const birthdays = getUpcomingBirthdays(users, 30);
 
   if (birthdays.length === 0)
     return (
-      <div className="mb-6">
+      <div className="flex flex-col h-full">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
           Upcoming Birthdays
         </p>
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-6 text-center">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-6 text-center flex-1 flex flex-col items-center justify-center">
           <Cake size={22} className="text-gray-300 mx-auto mb-2" />
           <p className="text-sm text-gray-400">
             No birthdays in the next 30 days
@@ -113,22 +196,20 @@ const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
     );
 
   return (
-    <div className="mb-6">
+    <div className="flex flex-col h-full">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
-        Upcoming Birthdays{" "}
-        <span className="normal-case font-normal">
-          — next 30 days ({birthdays.length})
-        </span>
+        Birthdays{" "}
+        <span className="normal-case font-normal">({birthdays.length})</span>
       </p>
       <div className="space-y-2">
         {birthdays.map((b, i) => (
           <div
             key={i}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3"
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3"
           >
             {/* Days pill */}
             <div
-              className={`shrink-0 w-12 h-12 rounded-xl flex flex-col items-center justify-center font-bold ${
+              className={`shrink-0 w-11 h-11 rounded-xl flex flex-col items-center justify-center font-bold ${
                 b.daysUntil === 0
                   ? "bg-pink-100 text-pink-600"
                   : b.daysUntil <= 7
@@ -137,11 +218,11 @@ const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
               }`}
             >
               {b.daysUntil === 0 ? (
-                <Cake size={20} />
+                <Cake size={18} />
               ) : (
                 <>
-                  <span className="text-lg leading-none">{b.daysUntil}</span>
-                  <span className="text-[10px] font-medium opacity-70">
+                  <span className="text-base leading-none">{b.daysUntil}</span>
+                  <span className="text-[9px] font-medium opacity-70">
                     days
                   </span>
                 </>
@@ -150,27 +231,109 @@ const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
 
             {/* Details */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-semibold text-gray-900 truncate">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="text-xs font-semibold text-gray-900 truncate">
                   {b.name}
                 </p>
                 {b.daysUntil === 0 && (
-                  <span className="text-xs font-medium text-pink-600 bg-pink-50 px-2 py-0.5 rounded-full shrink-0">
+                  <span className="text-[10px] font-medium text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded-full shrink-0">
                     Today! 🎂
                   </span>
                 )}
               </div>
-              <p className="text-xs text-gray-400 truncate">{b.email}</p>
-              <div className="flex items-center gap-3 mt-1">
-                <span className="text-xs text-gray-500">
-                  {formatBirthdayDate(b.dob)}
+              <p className="text-[10px] text-gray-400 truncate">{b.email}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">
+                {formatBirthdayDate(b.dob)} · Turning {b.turningAge}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const UpcomingPayouts = ({ users }: { users: UserProfile[] }) => {
+  const payouts = getUpcomingPayouts(users, 30);
+
+  if (payouts.length === 0)
+    return (
+      <div className="flex flex-col h-full">
+        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
+          Upcoming Payouts
+        </p>
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm text-center flex-1 flex flex-col items-center justify-center">
+          <CalendarClock size={22} className="text-gray-300 mx-auto mb-2" />
+          <p className="text-sm text-gray-400">
+            No payouts in the next 30 days
+          </p>
+        </div>
+      </div>
+    );
+
+  return (
+    <div className="flex flex-col h-full">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
+        Payouts{" "}
+        <span className="normal-case font-normal">({payouts.length})</span>
+      </p>
+      <div className="space-y-2">
+        {payouts.map((p, i) => (
+          <div
+            key={i}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3"
+          >
+            {/* Days pill */}
+            <div
+              className={`shrink-0 w-11 h-11 rounded-xl flex flex-col items-center justify-center font-bold ${
+                p.daysUntil === 0
+                  ? "bg-emerald-100 text-emerald-600"
+                  : p.daysUntil <= 7
+                    ? "bg-orange-50 text-orange-600"
+                    : "bg-sky-50 text-sky-600"
+              }`}
+            >
+              {p.daysUntil === 0 ? (
+                <TrendingUp size={18} />
+              ) : (
+                <>
+                  <span className="text-base leading-none">{p.daysUntil}</span>
+                  <span className="text-[9px] font-medium opacity-70">
+                    days
+                  </span>
+                </>
+              )}
+            </div>
+
+            {/* Details */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="text-xs font-semibold text-gray-900 truncate">
+                  {p.name}
+                </p>
+                {p.daysUntil === 0 && (
+                  <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full shrink-0">
+                    Due today!
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-400 truncate">{p.planName}</p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[10px] font-semibold text-emerald-600">
+                  {currency(p.payoutAmount)}
                 </span>
-                <span className="text-xs text-gray-300">·</span>
-                <span className="text-xs text-gray-500">
-                  Turning {b.turningAge}
+                <span className="text-[10px] text-gray-300">·</span>
+                <span className="text-[10px] text-gray-500">
+                  {formatPayoutDate(p.payoutDate)}
                 </span>
-                <span className="text-xs text-gray-300">·</span>
-                <span className="text-xs text-gray-500">{b.phone}</span>
+                {p.units > 0 && (
+                  <>
+                    <span className="text-[10px] text-gray-300">·</span>
+                    <span className="text-[10px] text-gray-500">
+                      {p.units} units
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -276,7 +439,6 @@ const AdminDashboard = () => {
     }, 0),
   };
 
-  // Filter + search
   const filtered = users.filter((u) => {
     const q = search.toLowerCase();
     const matchSearch =
@@ -327,8 +489,11 @@ const AdminDashboard = () => {
         </p>
       </div>
 
-      {/* Upcoming Birthdays Section - INTEGRATED HERE */}
-      <UpcomingBirthdays users={users} />
+      {/* Birthdays + Payouts — side by side */}
+      <div className="grid grid-cols-2 gap-3 mb-6">
+        <UpcomingBirthdays users={users} />
+        <UpcomingPayouts users={users} />
+      </div>
 
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-3 mb-6">
@@ -350,7 +515,7 @@ const AdminDashboard = () => {
           icon={<Banknote size={16} />}
           label="Total Invested"
           value={currency(stats.totalInvested)}
-          accent="bg-primary/20 text-primary border-primary/20"
+          accent="bg-primary/20 text-black border-primary/20"
           sub="Across all user accounts"
         />
         <StatCard
@@ -416,6 +581,7 @@ const AdminDashboard = () => {
           return (
             <div
               key={user.id}
+              onClick={() => setSelected(user)}
               className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer active:scale-[0.99]"
             >
               {/* Avatar */}

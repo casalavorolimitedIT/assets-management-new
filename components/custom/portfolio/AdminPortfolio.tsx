@@ -782,7 +782,7 @@ export default function AdminPortfolio() {
       ) : (
         <>
           <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl max-h-70 overflow-scroll border border-zinc-100 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
                 <Layers className="size-4 text-zinc-400" />
                 <h3 className="text-sm font-bold text-zinc-900">
@@ -838,7 +838,7 @@ export default function AdminPortfolio() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border max-h-70 overflow-scroll border-zinc-100 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
                 <Calendar className="size-4 text-zinc-400" />
                 <h3 className="text-sm font-bold text-zinc-900">

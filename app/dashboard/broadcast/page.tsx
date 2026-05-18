@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { TabSwitcher } from "@/components/custom/broadcast/Broadcast";
 import { FilterBar } from "@/components/custom/broadcast/FilterBar";
 import { UserTable } from "@/components/custom/broadcast/UserTable";
+import axios from "axios";
 import {
   EmailForm,
   NotificationForm,
@@ -218,21 +219,21 @@ const BroadcastPage = () => {
           email: u.email,
           name: `${u.first_name} ${u.last_name}`,
         }));
-        const res = await fetch(
+        const { data } = await axios.post(
           `${process.env.NEXT_PUBLIC_SMTP_URL}/send-bulk-email`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subject, body, recipients }),
-          },
+          { subject, body, recipients },
         );
-        if (!res.ok) throw new Error(await res.text());
+        console.log("response", data);
         setToast({
           message: `Email sent to ${recipients.length} recipient${recipients.length !== 1 ? "s" : ""}`,
           type: "success",
         });
         handleClear();
-      } catch {
+      } catch (err) {
+        console.log(
+          "error",
+          axios.isAxiosError(err) ? err.response?.data : err,
+        );
         setToast({ message: "Failed to send email", type: "error" });
       } finally {
         setSending(false);

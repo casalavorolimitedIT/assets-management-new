@@ -37,7 +37,7 @@ export function EditBankModal({
 
       const { data: profile, error: fetchErr } = await supabase
         .from("profiles")
-        .select("compliance")
+        .select("compliance, first_name")
         .eq("id", user.id)
         .single();
 
@@ -61,6 +61,41 @@ export function EditBankModal({
         .eq("id", user.id);
 
       if (updateErr) throw new Error(updateErr.message);
+
+      const displayName =
+        profile?.first_name?.trim() || user.email?.split("@")[0] || "A user";
+
+      const [{ error: adminNotifErr }, { error: userNotifErr }] =
+        await Promise.all([
+          supabase.from("notifications").insert({
+            user_id: user.id,
+            title: "New Investment Submitted",
+            message: `${displayName} has submitted a new investment plan and it is pending review.`,
+            type: "success",
+            read: false,
+            forAdmin: true,
+          }),
+          supabase.from("notifications").insert({
+            user_id: user.id,
+            title: "Investment Submitted",
+            message: `Your investment plan has been submitted successfully and is pending review.`,
+            type: "success",
+            read: false,
+            forAdmin: false,
+            href: "/dashboard/portfolio",
+          }),
+        ]);
+
+      if (adminNotifErr)
+        console.error(
+          "Failed to send admin notification:",
+          adminNotifErr.message,
+        );
+      if (userNotifErr)
+        console.error(
+          "Failed to send user notification:",
+          userNotifErr.message,
+        );
 
       onSuccess({
         bank_name: bankName,

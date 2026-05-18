@@ -337,6 +337,17 @@ async function uploadFile(
   return data.publicUrl;
 }
 
+function getExtension(file: File): string {
+  const map: Record<string, string> = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "image/gif": ".gif",
+  };
+  return map[file.type] ?? ".jpg";
+}
+
 async function submitVerification(
   values: FormValues,
 ): Promise<{ uid: string; email: string }> {
@@ -354,7 +365,7 @@ async function submitVerification(
       ? uploadFile(
           supabase,
           "verifications",
-          `${uid}/passport_${ts}`,
+          `${uid}/passport_${ts}${getExtension(values.passportPhoto)}`,
           values.passportPhoto,
         )
       : Promise.resolve(""),
@@ -362,7 +373,7 @@ async function submitVerification(
       ? uploadFile(
           supabase,
           "verifications",
-          `${uid}/signature_${ts}`,
+          `${uid}/signature_${ts}${getExtension(values.signature)}`,
           values.signature,
         )
       : Promise.resolve(""),
@@ -441,7 +452,7 @@ async function submitVerification(
 
   const { data: profile, error: fetchErr } = await supabase
     .from("profiles")
-    .select("compliance")
+    .select("compliance, first_name")
     .eq("id", uid)
     .single();
 
@@ -510,14 +521,8 @@ async function submitVerification(
       values.investmentPlan === "reif" ? Number(values.reifUnits) : undefined,
   });
 
-  const { data: profileForName } = await supabase
-    .from("profiles")
-    .select("first_name")
-    .eq("id", uid)
-    .single();
-
   const displayName =
-    profileForName?.first_name?.trim() || user.email?.split("@")[0] || "A user";
+    profile?.first_name?.trim() || user.email?.split("@")[0] || "A user";
 
   const planLabels: Record<string, string> = {
     premium_plus: "Premium Plus",

@@ -53,7 +53,6 @@ export function NotificationDropdown({
 }: NotificationDropdownProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  console.log("[NotificationDropdown]", { userId, isAdmin });
   const { notifications, loading, markAsRead, markAllAsRead } =
     useNotifications(userId, isAdmin);
   const visibleNotifications = notifications;

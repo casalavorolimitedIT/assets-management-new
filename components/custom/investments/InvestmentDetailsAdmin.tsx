@@ -24,6 +24,8 @@ import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 import type { Compliance, InvestmentPlan, UserProfile } from "@/types";
 import { Pagination } from "../Pagination";
+import Image from "next/image";
+import Link from "next/link";
 
 type UserFilter = "ALL" | "VERIFIED" | "PENDING" | "FUNDED";
 
@@ -604,6 +606,75 @@ export default function InvestmentDetailsAdmin() {
                       </div>
                     </section>
 
+                    {/* ── Documents ── */}
+                    {(bio?.passport_photo_url || bio?.signature_url) && (
+                      <section className="mb-6">
+                        <h3 className="mb-3 text-sm font-semibold text-zinc-950">
+                          Documents
+                        </h3>
+                        <div className="grid grid-cols-2 gap-3">
+                          {bio?.passport_photo_url && (
+                            <div className="flex flex-col gap-1.5">
+                              <p className="text-xs font-medium text-zinc-400">
+                                Passport Photo
+                              </p>
+                              <Link
+                                href={bio.passport_photo_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="group relative block overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50"
+                              >
+                                <div className="relative h-48 w-full">
+                                  <Image
+                                    src={bio.passport_photo_url}
+                                    alt="Passport photograph"
+                                    fill
+                                    className="object-cover transition-transform duration-200 group-hover:scale-105"
+                                    sizes="(max-width: 640px) 50vw, 200px"
+                                    unoptimized
+                                  />
+                                </div>
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
+                                  <span className="rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-semibold text-zinc-700 opacity-0 transition-opacity group-hover:opacity-100">
+                                    Open full size
+                                  </span>
+                                </div>
+                              </Link>
+                            </div>
+                          )}
+
+                          {bio?.signature_url && (
+                            <div className="flex flex-col gap-1.5">
+                              <p className="text-xs font-medium text-zinc-400">
+                                Signature
+                              </p>
+                              <Link
+                                href={bio.signature_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="group relative block overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50"
+                              >
+                                <div className="relative h-48 w-full">
+                                  <Image
+                                    src={bio.signature_url}
+                                    alt="Signature"
+                                    fill
+                                    className="object-contain p-4 transition-transform duration-200 group-hover:scale-105"
+                                    sizes="(max-width: 640px) 50vw, 200px"
+                                    unoptimized
+                                  />
+                                </div>
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/20">
+                                  <span className="rounded-full bg-white/90 px-2.5 py-1 text-[10px] font-semibold text-zinc-700 opacity-0 transition-opacity group-hover:opacity-100">
+                                    Open full size
+                                  </span>
+                                </div>
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      </section>
+                    )}
                     <section className="mb-6">
                       <h3 className="mb-3 text-sm font-semibold text-zinc-950">
                         Next of Kin & Bank

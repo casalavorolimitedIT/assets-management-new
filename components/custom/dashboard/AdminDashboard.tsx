@@ -115,6 +115,16 @@ function getUpcomingPayouts(
   today.setHours(0, 0, 0, 0);
   const results: PayoutEntry[] = [];
 
+  const parseTenorToMonths = (tenor: string): number => {
+    if (!tenor) return 0;
+    const match = tenor.match(/(\d+)\s*(?:Month|month)/);
+    if (match) {
+      return parseInt(match[1]);
+    }
+    const months = parseInt(tenor);
+    return isNaN(months) ? 0 : months;
+  };
+
   for (const user of users) {
     const compliance =
       typeof user.compliance === "string"
@@ -134,32 +144,66 @@ function getUpcomingPayouts(
       (compliance.investment_plan ? [compliance.investment_plan] : []);
 
     for (const plan of plans) {
-      const rawDate =
-        plan.payout_date ?? plan.maturity_date ?? plan.end_date ?? null;
-      if (!rawDate) continue;
+      if (!plan.monthly_payment_date) {
+        console.log(`No monthly_payment_date for ${user.first_name}`);
+        continue;
+      }
 
-      const payoutDate = new Date(rawDate);
-      if (isNaN(payoutDate.getTime())) continue;
+      const startDate = new Date(plan.monthly_payment_date);
+      if (isNaN(startDate.getTime())) {
+        console.log(
+          `Invalid start date for ${user.first_name}: ${plan.monthly_payment_date}`,
+        );
+        continue;
+      }
+
+      const monthsToAdd = parseTenorToMonths(plan.tenor);
+      if (monthsToAdd === 0) {
+        console.log(
+          `Could not parse tenor for ${user.first_name}: ${plan.tenor}`,
+        );
+        continue;
+      }
+
+      const payoutDate = new Date(startDate);
+      payoutDate.setMonth(payoutDate.getMonth() + monthsToAdd);
 
       const daysUntil = Math.round(
         (payoutDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
       );
+
+      // Only include future payouts within the specified range
       if (daysUntil < 0 || daysUntil > withinDays) continue;
+
+      const principal = plan.total_figures ?? plan.monthly_amount_figures ?? 0;
+
+      const planKey = plan.plan?.toLowerCase();
+      const PLAN_RATES: Record<string, number> = {
+        premium_plus: 0.17,
+        premium: 0.15,
+        reif: 0.12,
+      };
+      const annualRate = PLAN_RATES[planKey] ?? 0.15;
+
+      const expectedReturns = principal * (1 + (annualRate * monthsToAdd) / 12);
+
+      const payoutAmount =
+        plan.payout_amount ?? plan.returns ?? expectedReturns;
 
       results.push({
         name: `${user.title ?? ""} ${user.first_name} ${user.last_name}`.trim(),
         email: user.email,
         phone: user.phone,
-        planName: plan.plan_name ?? plan.name ?? "Investment Plan",
-        payoutDate: rawDate,
-        payoutAmount:
-          plan.payout_amount ?? plan.returns ?? plan.total_figures ?? 0,
+        planName: plan.plan?.toUpperCase() ?? "Investment Plan",
+        payoutDate: payoutDate.toISOString(),
+        payoutAmount: payoutAmount,
         units: plan.units ?? 0,
         daysUntil,
       });
     }
   }
 
+  // Sort by closest payout first
   return results.sort((a, b) => a.daysUntil - b.daysUntil);
 }
 

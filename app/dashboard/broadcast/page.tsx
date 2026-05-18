@@ -223,7 +223,6 @@ const BroadcastPage = () => {
           `${process.env.NEXT_PUBLIC_SMTP_URL}/send-bulk-email`,
           { subject, body, recipients },
         );
-        console.log("response", data);
         setToast({
           message: `Email sent to ${recipients.length} recipient${recipients.length !== 1 ? "s" : ""}`,
           type: "success",

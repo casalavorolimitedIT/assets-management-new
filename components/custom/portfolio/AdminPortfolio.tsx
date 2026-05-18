@@ -87,7 +87,7 @@ const PLAN_META: Record<
   },
 };
 
-const PAGE_SIZE = 10; // Items per page
+const PAGE_SIZE = 10;
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-NG", {
@@ -296,10 +296,6 @@ function PlanCard({
                 <p className="text-sm font-bold text-zinc-900">
                   {meta.label} Plan
                 </p>
-                <span className="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-600">
-                  <BadgeCheck className="size-3" />
-                  Active
-                </span>
               </div>
               <p className="mt-0.5 text-xs text-zinc-500">
                 {owner ? getUserName(owner) : meta.description}
@@ -450,22 +446,56 @@ function PlanCard({
   );
 }
 
-function DonutChart({ plans }: { plans: InvestmentPlan[] }) {
-  const total = plans.reduce((s, p) => s + getPrincipal(p), 0);
+// Aggregated Donut Chart - groups by plan type
+function AggregatedDonutChart({ plans }: { plans: InvestmentPlan[] }) {
+  // Aggregate by plan type
+  const aggregatedByPlan = useMemo(() => {
+    const aggregation: Record<
+      string,
+      { total: number; color: string; label: string }
+    > = {};
+
+    plans.forEach((inv) => {
+      const planKey = inv.plan.toLowerCase();
+      const meta = PLAN_META[planKey] ?? PLAN_META.premium;
+      const principal = getPrincipal(inv);
+
+      if (!aggregation[planKey]) {
+        aggregation[planKey] = {
+          total: 0,
+          color: meta.color,
+          label: meta.label,
+        };
+      }
+      aggregation[planKey].total += principal;
+    });
+
+    return Object.entries(aggregation).map(([key, data]) => ({
+      key,
+      ...data,
+    }));
+  }, [plans]);
+
+  const total = aggregatedByPlan.reduce((sum, item) => sum + item.total, 0);
   if (!total) return null;
 
   const size = 140;
   const r = 52;
   const circ = 2 * Math.PI * r;
-  const segments = plans.reduce<
-    Array<{ color: string; pct: number; offset: number }>
-  >((items, inv) => {
-    const key = inv.plan.toLowerCase();
-    const meta = PLAN_META[key] ?? PLAN_META.premium;
-    const pct = getPrincipal(inv) / total;
-    const offset = items.reduce((sum, item) => sum + item.pct, 0);
-    return [...items, { color: meta.color, pct, offset }];
-  }, []);
+  let cumulativeOffset = 0;
+
+  const segments = aggregatedByPlan.map((item) => {
+    const pct = item.total / total;
+    const offset = cumulativeOffset;
+    cumulativeOffset += pct;
+    return {
+      color: item.color,
+      pct,
+      offset,
+      label: item.label,
+      total: item.total,
+    };
+  });
 
   return (
     <div
@@ -511,6 +541,246 @@ function DonutChart({ plans }: { plans: InvestmentPlan[] }) {
   );
 }
 
+// Aggregated Maturity Timeline - groups by plan type
+function AggregatedMaturityTimeline({ plans }: { plans: InvestmentPlan[] }) {
+  // Aggregate by plan type and calculate average metrics
+  const aggregatedByPlan = useMemo(() => {
+    const aggregation: Record<
+      string,
+      {
+        totalPrincipal: number;
+        count: number;
+        color: string;
+        label: string;
+        icon: React.ElementType;
+        gradient: string;
+        totalProgress: number;
+        totalDaysLeft: number;
+        maturityDates: Date[];
+      }
+    > = {};
+
+    plans.forEach((inv) => {
+      const planKey = inv.plan.toLowerCase();
+      const meta = PLAN_META[planKey] ?? PLAN_META.premium;
+      const principal = getPrincipal(inv);
+      const progress = getProgress(inv);
+      const daysLeft = getDaysRemaining(inv);
+      const maturity = getMaturityDate(inv);
+
+      if (!aggregation[planKey]) {
+        aggregation[planKey] = {
+          totalPrincipal: 0,
+          count: 0,
+          color: meta.color,
+          label: meta.label,
+          icon: meta.icon,
+          gradient: meta.gradient,
+          totalProgress: 0,
+          totalDaysLeft: 0,
+          maturityDates: [],
+        };
+      }
+
+      aggregation[planKey].totalPrincipal += principal;
+      aggregation[planKey].count += 1;
+      aggregation[planKey].totalProgress += progress;
+      aggregation[planKey].totalDaysLeft += daysLeft;
+      if (maturity) {
+        aggregation[planKey].maturityDates.push(maturity);
+      }
+    });
+
+    return Object.entries(aggregation).map(([key, data]) => ({
+      key,
+      ...data,
+      avgProgress: data.totalProgress / data.count,
+      avgDaysLeft: Math.round(data.totalDaysLeft / data.count),
+      latestMaturity:
+        data.maturityDates.length > 0
+          ? new Date(Math.max(...data.maturityDates.map((d) => d.getTime())))
+          : null,
+    }));
+  }, [plans]);
+
+  return (
+    <div className="space-y-4">
+      {aggregatedByPlan.map((item, i) => {
+        const Icon = item.icon;
+        const progress = item.avgProgress;
+        const daysLeft = item.avgDaysLeft;
+
+        return (
+          <div key={item.key} className="flex items-center gap-3">
+            <div className="relative shrink-0">
+              <RadialProgress percent={progress} color={item.color} size={52} />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Icon className="size-4" style={{ color: item.color }} />
+              </div>
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-zinc-800">
+                  {item.label} ({item.count}{" "}
+                  {item.count === 1 ? "plan" : "plans"})
+                </p>
+                <span
+                  className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
+                  style={{
+                    backgroundColor: `${item.color}18`,
+                    color: item.color,
+                  }}
+                >
+                  {daysLeft > 0 ? `${daysLeft} days left` : "Matured"}
+                </span>
+              </div>
+              <p className="mt-0.5 text-[10px] text-zinc-400">
+                Total Investment: {fmtShort(item.totalPrincipal)}
+              </p>
+              {item.latestMaturity && (
+                <p className="mt-0.5 text-[10px] text-zinc-400">
+                  Latest Maturity:{" "}
+                  {item.latestMaturity.toLocaleDateString("en-NG", {
+                    day: "numeric",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </p>
+              )}
+              <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-zinc-100">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${progress}%`,
+                    backgroundColor: item.color,
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Aggregated Returns Breakdown - groups by plan type
+function AggregatedReturnsBreakdown({ plans }: { plans: InvestmentPlan[] }) {
+  // Aggregate by plan type
+  const aggregatedByPlan = useMemo(() => {
+    const aggregation: Record<
+      string,
+      {
+        totalPrincipal: number;
+        totalProjected: number;
+        totalGain: number;
+        color: string;
+        label: string;
+        count: number;
+      }
+    > = {};
+
+    plans.forEach((inv) => {
+      const planKey = inv.plan.toLowerCase();
+      const meta = PLAN_META[planKey] ?? PLAN_META.premium;
+      const principal = getPrincipal(inv);
+      const projected = getProjectedReturn(inv);
+      const gain = projected - principal;
+
+      if (!aggregation[planKey]) {
+        aggregation[planKey] = {
+          totalPrincipal: 0,
+          totalProjected: 0,
+          totalGain: 0,
+          color: meta.color,
+          label: meta.label,
+          count: 0,
+        };
+      }
+
+      aggregation[planKey].totalPrincipal += principal;
+      aggregation[planKey].totalProjected += projected;
+      aggregation[planKey].totalGain += gain;
+      aggregation[planKey].count += 1;
+    });
+
+    return Object.entries(aggregation).map(([key, data]) => ({
+      key,
+      ...data,
+      avgGainPct:
+        data.totalPrincipal > 0
+          ? ((data.totalGain / data.totalPrincipal) * 100).toFixed(1)
+          : "0",
+    }));
+  }, [plans]);
+
+  const allPlansTotalPrincipal = aggregatedByPlan.reduce(
+    (sum, item) => sum + item.totalPrincipal,
+    0,
+  );
+
+  return (
+    <div className="space-y-3">
+      {aggregatedByPlan.map((item, i) => {
+        const barWidth =
+          allPlansTotalPrincipal > 0
+            ? (item.totalPrincipal / allPlansTotalPrincipal) * 100
+            : 0;
+
+        return (
+          <div key={item.key} className="flex items-center gap-4">
+            <div className="w-24 shrink-0">
+              <p className="text-xs font-semibold text-zinc-700">
+                {item.label}
+              </p>
+              <p className="text-[10px] text-zinc-400">
+                {item.count} {item.count === 1 ? "plan" : "plans"}
+              </p>
+            </div>
+            <div className="flex-1">
+              <div className="relative h-8 overflow-hidden rounded-lg bg-zinc-100">
+                <div
+                  className="absolute inset-y-0 left-0 rounded-lg transition-all duration-700"
+                  style={{
+                    width: `${barWidth}%`,
+                    backgroundColor: `${item.color}30`,
+                  }}
+                />
+                <div
+                  className="absolute inset-y-0 rounded-r-lg transition-all duration-700"
+                  style={{
+                    left: `${barWidth}%`,
+                    width: `${
+                      allPlansTotalPrincipal > 0
+                        ? (item.totalGain / allPlansTotalPrincipal) * 100
+                        : 0
+                    }%`,
+                    backgroundColor: `${item.color}60`,
+                  }}
+                />
+                <div className="absolute inset-0 flex items-center px-3">
+                  <span
+                    className="text-[10px] font-bold"
+                    style={{ color: item.color }}
+                  >
+                    +{fmtShort(item.totalGain)} ({item.avgGainPct}% avg)
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div className="w-20 shrink-0 text-right">
+              <p className="text-xs font-black tabular-nums text-zinc-900">
+                {fmtShort(item.totalProjected)}
+              </p>
+              <p className="text-[10px] text-zinc-400">total value</p>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function AdminPortfolio() {
   const [portfolios, setPortfolios] = useState<InvestorPortfolio[]>([]);
   const [loading, setLoading] = useState(true);
@@ -520,7 +790,6 @@ export default function AdminPortfolio() {
   const [filter, setFilter] = useState<PortfolioFilter>("ALL");
   const [tab, setTab] = useState<"all" | string>("all");
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
   const fetchPortfolios = useCallback(async () => {
@@ -553,11 +822,17 @@ export default function AdminPortfolio() {
     void fetchPortfolios();
   }, [fetchPortfolios]);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [search, filter, tab]);
 
+  // ALL PLANS - unfiltered, used for aggregated charts
+  const allPlans = useMemo(
+    () => portfolios.flatMap(({ plans }) => plans),
+    [portfolios],
+  );
+
+  // Filtered portfolios based on search and filter - for user details section
   const searchedPortfolios = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -585,6 +860,7 @@ export default function AdminPortfolio() {
     });
   }, [filter, portfolios, search]);
 
+  // Visible plans from filtered portfolios - for stats bar and plan cards
   const visiblePlans = searchedPortfolios.flatMap(({ user, plans }) =>
     plans.map((plan) => ({ plan, owner: user })),
   );
@@ -594,7 +870,6 @@ export default function AdminPortfolio() {
       ? visiblePlans
       : visiblePlans.filter(({ plan }) => plan.plan === tab);
 
-  // Pagination for plans
   const totalItems = plansByTab.length;
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
   const paginatedPlans = useMemo(() => {
@@ -603,25 +878,23 @@ export default function AdminPortfolio() {
     return plansByTab.slice(start, end);
   }, [plansByTab, currentPage]);
 
-  const allVisiblePlans = visiblePlans.map(({ plan }) => plan);
-  const totalPrincipal = allVisiblePlans.reduce(
-    (s, p) => s + getPrincipal(p),
-    0,
-  );
-  const totalProjected = allVisiblePlans.reduce(
+  // Stats bar reflects the current search/filter scope (filtered plans)
+  const filteredPlans = visiblePlans.map(({ plan }) => plan);
+  const totalPrincipal = filteredPlans.reduce((s, p) => s + getPrincipal(p), 0);
+  const totalProjected = filteredPlans.reduce(
     (s, p) => s + getProjectedReturn(p),
     0,
   );
   const totalGain = totalProjected - totalPrincipal;
   const avgRate =
-    allVisiblePlans.length > 0
-      ? allVisiblePlans.reduce(
+    filteredPlans.length > 0
+      ? filteredPlans.reduce(
           (s, p) => s + (PLAN_META[p.plan]?.rate ?? 0.15),
           0,
-        ) / allVisiblePlans.length
+        ) / filteredPlans.length
       : 0;
 
-  const planTypes = Array.from(new Set(allVisiblePlans.map((p) => p.plan)));
+  const planTypes = Array.from(new Set(filteredPlans.map((p) => p.plan)));
   const fundedInvestors = searchedPortfolios.filter(
     ({ plans: userPlans }) => userPlans.length > 0,
   ).length;
@@ -633,7 +906,6 @@ export default function AdminPortfolio() {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    // Optional: Scroll to top when page changes
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -765,7 +1037,7 @@ export default function AdminPortfolio() {
         ))}
       </div>
 
-      {!allVisiblePlans.length ? (
+      {!filteredPlans.length ? (
         <div className="flex min-h-96 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-zinc-200 bg-white text-center">
           <div className="flex size-16 items-center justify-center rounded-2xl bg-zinc-100">
             <UserRound className="size-7 text-zinc-400" />
@@ -782,37 +1054,58 @@ export default function AdminPortfolio() {
       ) : (
         <>
           <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-2xl max-h-70 overflow-scroll border border-zinc-100 bg-white p-5 shadow-sm">
+            {/* Allocation Breakdown — AGGREGATED by plan type */}
+            <div className="max-h-96 overflow-y-auto rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
                 <Layers className="size-4 text-zinc-400" />
                 <h3 className="text-sm font-bold text-zinc-900">
                   Allocation Breakdown
                 </h3>
+                <span className="ml-auto text-[10px] text-zinc-400">
+                  Aggregated by plan
+                </span>
               </div>
               <div className="flex items-center gap-6">
-                <DonutChart plans={allVisiblePlans} />
+                <AggregatedDonutChart plans={allPlans} />
                 <div className="flex-1 space-y-2.5">
-                  {allVisiblePlans.map((inv, index) => {
-                    const key = inv.plan.toLowerCase();
-                    const meta = PLAN_META[key] ?? PLAN_META.premium;
-                    const principal = getPrincipal(inv);
+                  {Object.entries(
+                    allPlans.reduce(
+                      (acc, inv) => {
+                        const planKey = inv.plan.toLowerCase();
+                        const meta = PLAN_META[planKey] ?? PLAN_META.premium;
+                        if (!acc[planKey]) {
+                          acc[planKey] = {
+                            label: meta.label,
+                            color: meta.color,
+                            total: 0,
+                          };
+                        }
+                        acc[planKey].total += getPrincipal(inv);
+                        return acc;
+                      },
+                      {} as Record<
+                        string,
+                        { label: string; color: string; total: number }
+                      >,
+                    ),
+                  ).map(([key, data]) => {
+                    const total = allPlans.reduce(
+                      (s, p) => s + getPrincipal(p),
+                      0,
+                    );
                     const pct =
-                      totalPrincipal > 0
-                        ? ((principal / totalPrincipal) * 100).toFixed(1)
-                        : "0";
+                      total > 0 ? ((data.total / total) * 100).toFixed(1) : "0";
+
                     return (
-                      <div
-                        key={`${key}-${inv.monthly_payment_date}-${index}`}
-                        className="flex items-center gap-2.5"
-                      >
+                      <div key={key} className="flex items-center gap-2.5">
                         <div
                           className="size-2.5 shrink-0 rounded-full"
-                          style={{ backgroundColor: meta.color }}
+                          style={{ backgroundColor: data.color }}
                         />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between">
                             <p className="text-xs font-semibold text-zinc-700">
-                              {meta.label}
+                              {data.label}
                             </p>
                             <p className="text-xs font-bold tabular-nums text-zinc-900">
                               {pct}%
@@ -823,12 +1116,12 @@ export default function AdminPortfolio() {
                               className="h-full rounded-full transition-all duration-700"
                               style={{
                                 width: `${pct}%`,
-                                backgroundColor: meta.color,
+                                backgroundColor: data.color,
                               }}
                             />
                           </div>
                           <p className="mt-0.5 text-[10px] text-zinc-400">
-                            {fmtShort(principal)}
+                            {fmtShort(data.total)}
                           </p>
                         </div>
                       </div>
@@ -838,79 +1131,22 @@ export default function AdminPortfolio() {
               </div>
             </div>
 
-            <div className="rounded-2xl border max-h-70 overflow-scroll border-zinc-100 bg-white p-5 shadow-sm">
+            {/* Maturity Timeline — AGGREGATED by plan type */}
+            <div className="max-h-96 overflow-y-auto rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center gap-2">
                 <Calendar className="size-4 text-zinc-400" />
                 <h3 className="text-sm font-bold text-zinc-900">
                   Maturity Timeline
                 </h3>
+                <span className="ml-auto text-[10px] text-zinc-400">
+                  Aggregated by plan
+                </span>
               </div>
-              <div className="space-y-4">
-                {allVisiblePlans.map((inv, i) => {
-                  const key = inv.plan.toLowerCase();
-                  const meta = PLAN_META[key] ?? PLAN_META.premium;
-                  const maturity = getMaturityDate(inv);
-                  const daysLeft = getDaysRemaining(inv);
-                  const progress = getProgress(inv);
-                  const Icon = meta.icon;
-
-                  return (
-                    <div key={i} className="flex items-center gap-3">
-                      <div className="relative shrink-0">
-                        <RadialProgress
-                          percent={progress}
-                          color={meta.color}
-                          size={52}
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center">
-                          <Icon
-                            className="size-4"
-                            style={{ color: meta.color }}
-                          />
-                        </div>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-bold text-zinc-800">
-                            {meta.label}
-                          </p>
-                          <span
-                            className="rounded-full px-2 py-0.5 text-[10px] font-semibold"
-                            style={{
-                              backgroundColor: `${meta.color}18`,
-                              color: meta.color,
-                            }}
-                          >
-                            {daysLeft > 0 ? `${daysLeft} days left` : "Matured"}
-                          </span>
-                        </div>
-                        <p className="mt-0.5 text-[10px] text-zinc-400">
-                          Matures{" "}
-                          {maturity
-                            ? maturity.toLocaleDateString("en-NG", {
-                                day: "numeric",
-                                month: "long",
-                                year: "numeric",
-                              })
-                            : "N/A"}
-                        </p>
-                        <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-zinc-100">
-                          <div
-                            className="h-full rounded-full transition-all duration-700"
-                            style={{
-                              width: `${progress}%`,
-                              backgroundColor: meta.color,
-                            }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <AggregatedMaturityTimeline plans={allPlans} />
             </div>
           </div>
 
+          {/* Returns Breakdown — AGGREGATED by plan type */}
           <div className="mb-6 rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
               <BarChart3 className="size-4 text-zinc-400" />
@@ -919,81 +1155,20 @@ export default function AdminPortfolio() {
               </h3>
               <div className="ml-auto flex items-center gap-1.5 rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold text-zinc-500">
                 <Info className="size-3" />
-                Projections at maturity
+                Aggregated by plan
               </div>
             </div>
-            <div className="space-y-3">
-              {allVisiblePlans.map((inv, i) => {
-                const key = inv.plan.toLowerCase();
-                const meta = PLAN_META[key] ?? PLAN_META.premium;
-                const principal = getPrincipal(inv);
-                const projected = getProjectedReturn(inv);
-                const gain = projected - principal;
-                const gainPct =
-                  principal > 0 ? ((gain / principal) * 100).toFixed(1) : "0";
-                const barWidth =
-                  totalPrincipal > 0 ? (principal / totalPrincipal) * 100 : 0;
-
-                return (
-                  <div key={i} className="flex items-center gap-4">
-                    <div className="w-24 shrink-0">
-                      <p className="text-xs font-semibold text-zinc-700">
-                        {meta.label}
-                      </p>
-                      <p className="text-[10px] text-zinc-400">
-                        {fmtShort(principal)}
-                      </p>
-                    </div>
-                    <div className="flex-1">
-                      <div className="relative h-8 overflow-hidden rounded-lg bg-zinc-100">
-                        <div
-                          className="absolute inset-y-0 left-0 rounded-lg transition-all duration-700"
-                          style={{
-                            width: `${barWidth}%`,
-                            backgroundColor: `${meta.color}30`,
-                          }}
-                        />
-                        <div
-                          className="absolute inset-y-0 rounded-r-lg transition-all duration-700"
-                          style={{
-                            left: `${barWidth}%`,
-                            width: `${
-                              totalPrincipal > 0
-                                ? (gain / totalPrincipal) * 100
-                                : 0
-                            }%`,
-                            backgroundColor: `${meta.color}60`,
-                          }}
-                        />
-                        <div className="absolute inset-0 flex items-center px-3">
-                          <span
-                            className="text-[10px] font-bold"
-                            style={{ color: meta.color }}
-                          >
-                            +{fmtShort(gain)} ({gainPct}%)
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="w-20 shrink-0 text-right">
-                      <p className="text-xs font-black tabular-nums text-zinc-900">
-                        {fmtShort(projected)}
-                      </p>
-                      <p className="text-[10px] text-zinc-400">at maturity</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <AggregatedReturnsBreakdown plans={allPlans} />
           </div>
 
+          {/* User Plans Section — THIS is what gets filtered by search */}
           <div>
             {planTypes.length > 1 && (
               <div className="mb-4 flex items-center gap-2 overflow-x-auto pb-1">
                 {["all", ...planTypes].map((t) => {
                   const label =
                     t === "all"
-                      ? `All Plans (${allVisiblePlans.length})`
+                      ? `All Plans (${filteredPlans.length})`
                       : (PLAN_META[t]?.label ?? t);
                   return (
                     <button
@@ -1023,7 +1198,6 @@ export default function AdminPortfolio() {
               ))}
             </div>
 
-            {/* Pagination Component */}
             {totalPages > 1 && (
               <div className="mt-8">
                 <Pagination

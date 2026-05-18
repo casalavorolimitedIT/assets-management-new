@@ -19,6 +19,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Pagination } from "../Pagination";
 
 export type TxStatus = "pending" | "active" | "completed" | "failed";
 export type TxType = "investment" | "return" | "withdrawal";
@@ -235,12 +236,16 @@ function EmptyState({ filtered }: { filtered: boolean }) {
 }
 
 export default function UserTransactions() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<TxStatus | "all">("all");
   const [filterPlan, setFilterPlan] = useState<string>("all");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const fetchTransactions = async () => {
     setLoading(true);
@@ -259,7 +264,8 @@ export default function UserTransactions() {
         .order("created_at", { ascending: false });
 
       if (error) throw new Error(error.message);
-      setTransactions(data ?? []);
+      setAllTransactions(data ?? []);
+      setCurrentPage(1); // Reset to first page when data changes
     } catch (err) {
       setFetchError(
         err instanceof Error ? err.message : "Failed to load transactions.",
@@ -273,16 +279,8 @@ export default function UserTransactions() {
     fetchTransactions();
   }, []);
 
-  const totalInvested = transactions
-    .filter((t) => t.type === "investment")
-    .reduce((s, t) => s + t.amount, 0);
-
-  const pendingCount = transactions.filter(
-    (t) => t.status === "pending",
-  ).length;
-  const activeCount = transactions.filter((t) => t.status === "active").length;
-
-  const filtered = transactions.filter((tx) => {
+  // Apply filters
+  const filteredTransactions = allTransactions.filter((tx) => {
     const matchSearch =
       !search ||
       tx.description.toLowerCase().includes(search.toLowerCase()) ||
@@ -292,19 +290,47 @@ export default function UserTransactions() {
     return matchSearch && matchStatus && matchPlan;
   });
 
+  // Pagination calculations
+  const totalFiltered = filteredTransactions.length;
+  const totalPages = Math.ceil(totalFiltered / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentTransactions = filteredTransactions.slice(startIndex, endIndex);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterStatus, filterPlan]);
+
+  // Calculate summary stats from all transactions (not paginated)
+  const totalInvested = allTransactions
+    .filter((t) => t.type === "investment")
+    .reduce((s, t) => s + t.amount, 0);
+
+  const pendingCount = allTransactions.filter(
+    (t) => t.status === "pending",
+  ).length;
+  const activeCount = allTransactions.filter(
+    (t) => t.status === "active",
+  ).length;
+
   const isFiltered =
     search !== "" || filterStatus !== "all" || filterPlan !== "all";
 
-  const grouped = filtered.reduce<Record<string, Transaction[]>>((acc, tx) => {
-    const day = new Date(tx.created_at).toLocaleDateString("en-NG", {
-      weekday: "long",
-      day: "numeric",
-      month: "long",
-      year: "numeric",
-    });
-    (acc[day] ??= []).push(tx);
-    return acc;
-  }, {});
+  // Group current page transactions by date
+  const grouped = currentTransactions.reduce<Record<string, Transaction[]>>(
+    (acc, tx) => {
+      const day = new Date(tx.created_at).toLocaleDateString("en-NG", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      });
+      (acc[day] ??= []).push(tx);
+      return acc;
+    },
+    {},
+  );
 
   if (loading) {
     return (
@@ -350,7 +376,7 @@ export default function UserTransactions() {
       </div>
 
       {/* ── Summary strip ── */}
-      {transactions.length > 0 && (
+      {allTransactions.length > 0 && (
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             {
@@ -362,7 +388,7 @@ export default function UserTransactions() {
             },
             {
               label: "Transactions",
-              value: transactions.length.toString(),
+              value: allTransactions.length.toString(),
               icon: <ArrowUpRight className="size-4" />,
               color: "text-blue-600",
               bg: "bg-blue-50",
@@ -403,7 +429,7 @@ export default function UserTransactions() {
       )}
 
       {/* ── Filters ── */}
-      {transactions.length > 0 && (
+      {allTransactions.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
           {/* Search */}
           <div className="relative flex-1 min-w-48">
@@ -456,23 +482,36 @@ export default function UserTransactions() {
       )}
 
       {/* ── Transaction list ── */}
-      {filtered.length === 0 ? (
+      {filteredTransactions.length === 0 ? (
         <EmptyState filtered={isFiltered} />
       ) : (
-        <div className="space-y-4">
-          {Object.entries(grouped).map(([day, txs]) => (
-            <div key={day}>
-              <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                {day}
-              </p>
-              <div className="overflow-hidden rounded-2xl border border-zinc-100 bg-white shadow-sm">
-                {txs.map((tx, i) => (
-                  <TxRow key={tx.id} tx={tx} index={i} />
-                ))}
+        <>
+          <div className="space-y-4">
+            {Object.entries(grouped).map(([day, txs]) => (
+              <div key={day}>
+                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                  {day}
+                </p>
+                <div className="overflow-hidden rounded-2xl border border-zinc-100 bg-white shadow-sm">
+                  {txs.map((tx, i) => (
+                    <TxRow key={tx.id} tx={tx} index={i} />
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          {/* ── Pagination ── */}
+          <div className="mt-6">
+            <Pagination
+              page={currentPage}
+              totalPages={totalPages}
+              totalItems={totalFiltered}
+              pageSize={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        </>
       )}
     </div>
   );

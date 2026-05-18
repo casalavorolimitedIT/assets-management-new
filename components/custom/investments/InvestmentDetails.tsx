@@ -19,6 +19,7 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { AddPlanModal } from "./AddPlanModal";
 import { EditBankModal } from "./EditBankModal";
+import { Pagination } from "../Pagination";
 
 export interface InvestmentPlan {
   plan: string;
@@ -101,12 +102,16 @@ const fmtDate = (s: string) =>
   });
 
 export default function InvestmentDetails() {
-  const [plans, setPlans] = useState<InvestmentPlan[]>([]);
+  const [allPlans, setAllPlans] = useState<InvestmentPlan[]>([]);
   const [bank, setBank] = useState<BankDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showEditBank, setShowEditBank] = useState(false);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -158,14 +163,18 @@ export default function InvestmentDetails() {
         const ip = compliance?.investment_plan;
 
         if (ips && ips.length > 0) {
-          setPlans(ips.map(normalise));
+          setAllPlans(ips.map(normalise));
         } else if (ip) {
-          setPlans([normalise(ip)]);
+          setAllPlans([normalise(ip)]);
+        } else {
+          setAllPlans([]);
         }
 
         if (compliance?.bank_details) {
           setBank(compliance.bank_details);
         }
+
+        setCurrentPage(1); // Reset to first page when data loads
       } catch (err) {
         setFetchError(
           err instanceof Error ? err.message : "Failed to load data.",
@@ -177,6 +186,23 @@ export default function InvestmentDetails() {
 
     fetchProfile();
   }, []);
+
+  // Pagination calculations
+  const totalPlans = allPlans.length;
+  const totalPages = Math.ceil(totalPlans / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPlans = allPlans.slice(startIndex, endIndex);
+
+  // Handle new plan addition
+  const handleAddPlan = (newPlan: InvestmentPlan) => {
+    setAllPlans((prev) => [...prev, newPlan]);
+    // If adding a plan takes us to a new page, navigate to it
+    const newTotalPages = Math.ceil((allPlans.length + 1) / itemsPerPage);
+    if (currentPage !== newTotalPages && newTotalPages > totalPages) {
+      setCurrentPage(newTotalPages);
+    }
+  };
 
   if (loading) {
     return (
@@ -200,7 +226,7 @@ export default function InvestmentDetails() {
       {showModal && (
         <AddPlanModal
           onClose={() => setShowModal(false)}
-          onSuccess={(newPlan) => setPlans((prev) => [...prev, newPlan])}
+          onSuccess={handleAddPlan}
         />
       )}
 
@@ -225,104 +251,121 @@ export default function InvestmentDetails() {
         </div>
 
         {/* ── Plan cards or empty state ── */}
-        {plans.length > 0 ? (
-          <div className="mb-6 flex flex-col gap-4">
-            {plans.map((plan, index) => {
-              const planKey = plan.plan.toLowerCase();
-              const meta = PLAN_META[planKey] ?? PLAN_META.basic;
-              const PlanIcon = meta.icon;
-              const months = parseInt(plan.tenor) || 6;
+        {allPlans.length > 0 ? (
+          <>
+            <div className="mb-6 flex flex-col gap-4">
+              {currentPlans.map((plan, index) => {
+                const planKey = plan.plan.toLowerCase();
+                const meta = PLAN_META[planKey] ?? PLAN_META.basic;
+                const PlanIcon = meta.icon;
+                const months = parseInt(plan.tenor) || 6;
 
-              return (
-                <div
-                  key={index}
-                  className={`relative overflow-hidden rounded-2xl bg-linear-to-br ${meta.gradient} p-6 text-white shadow-lg`}
-                >
-                  {/* Background decoration */}
-                  <div className="absolute inset-0 overflow-hidden">
-                    <div className="absolute -right-10 -top-10 size-48 rounded-full bg-white/10" />
-                    <div className="absolute -bottom-16 -left-8 size-40 rounded-full bg-white/5" />
-                    <div className="absolute right-1/3 top-1/2 size-24 rounded-full bg-white/5" />
-                  </div>
+                return (
+                  <div
+                    key={`${plan.plan}-${index}`}
+                    className={`relative overflow-hidden rounded-2xl bg-linear-to-br ${meta.gradient} p-6 text-white shadow-lg transition-all hover:scale-[1.02] hover:shadow-xl`}
+                  >
+                    {/* Background decoration */}
+                    <div className="absolute inset-0 overflow-hidden">
+                      <div className="absolute -right-10 -top-10 size-48 rounded-full bg-white/10" />
+                      <div className="absolute -bottom-16 -left-8 size-40 rounded-full bg-white/5" />
+                      <div className="absolute right-1/3 top-1/2 size-24 rounded-full bg-white/5" />
+                    </div>
 
-                  <div className="relative">
-                    {/* Plan badge */}
-                    <div className="mb-4 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="flex size-8 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
-                          <PlanIcon className="size-4 text-white" />
+                    <div className="relative">
+                      {/* Plan badge */}
+                      <div className="mb-4 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="flex size-8 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
+                            <PlanIcon className="size-4 text-white" />
+                          </div>
+                          <span className="text-sm font-bold uppercase tracking-widest text-white/90">
+                            {plan.plan.replace(/_/g, " ")} Plan
+                          </span>
                         </div>
-                        <span className="text-sm font-bold uppercase tracking-widest text-white/90">
-                          {plan.plan.replace(/_/g, " ")} Plan
-                        </span>
+                        <div className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 backdrop-blur-sm">
+                          <BadgeCheck className="size-3.5" />
+                          <span className="text-xs font-semibold">Active</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 backdrop-blur-sm">
-                        <BadgeCheck className="size-3.5" />
-                        <span className="text-xs font-semibold">Active</span>
-                      </div>
-                    </div>
 
-                    {/* Main amount */}
-                    <div className="mb-6">
-                      <p className="text-sm text-white/70">
-                        {plan.plan === "reif"
-                          ? "Total Investment"
-                          : "Monthly Contribution"}
-                      </p>
-                      <p className="mt-1 text-4xl font-black tracking-tight">
-                        {fmt(plan.monthly_amount_figures)}
-                      </p>
-                      <p className="mt-1 text-sm capitalize text-white/70">
-                        {plan.monthly_amount_words}
-                      </p>
-                    </div>
+                      {/* Main amount */}
+                      <div className="mb-6">
+                        <p className="text-sm text-white/70">
+                          {plan.plan === "reif"
+                            ? "Total Investment"
+                            : "Monthly Contribution"}
+                        </p>
+                        <p className="mt-1 text-4xl font-black tracking-tight">
+                          {fmt(plan.monthly_amount_figures)}
+                        </p>
+                        <p className="mt-1 text-sm capitalize text-white/70">
+                          {plan.monthly_amount_words}
+                        </p>
+                      </div>
 
-                    {/* Details row */}
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm">
-                        <Clock className="mb-1 size-3.5 text-white/60" />
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-white/60">
-                          Tenor
-                        </p>
-                        <p className="text-sm font-bold">{plan.tenor}</p>
-                      </div>
-                      <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm">
-                        <Calendar className="mb-1 size-3.5 text-white/60" />
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-white/60">
-                          Pay Date
-                        </p>
-                        <p className="text-sm font-bold">
-                          {new Date(plan.monthly_payment_date).getDate()}th
-                          monthly
-                        </p>
-                      </div>
-                      <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm col-span-2 sm:col-span-1">
-                        <TrendingUp className="mb-1 size-3.5 text-white/60" />
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-white/60">
-                          Maturity Date
-                        </p>
-                        <p className="text-sm font-bold">
-                          {months > 0
-                            ? fmtDate(
-                                new Date(
-                                  new Date(plan.monthly_payment_date).setMonth(
+                      {/* Details row */}
+                      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                        <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm">
+                          <Clock className="mb-1 size-3.5 text-white/60" />
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-white/60">
+                            Tenor
+                          </p>
+                          <p className="text-sm font-bold">{plan.tenor}</p>
+                        </div>
+                        <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm">
+                          <Calendar className="mb-1 size-3.5 text-white/60" />
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-white/60">
+                            Pay Date
+                          </p>
+                          <p className="text-sm font-bold">
+                            {new Date(plan.monthly_payment_date).getDate()}th
+                            monthly
+                          </p>
+                        </div>
+                        <div className="rounded-xl bg-white/15 p-3 backdrop-blur-sm col-span-2 sm:col-span-1">
+                          <TrendingUp className="mb-1 size-3.5 text-white/60" />
+                          <p className="text-[10px] font-medium uppercase tracking-wider text-white/60">
+                            Maturity Date
+                          </p>
+                          <p className="text-sm font-bold">
+                            {months > 0
+                              ? fmtDate(
+                                  new Date(
                                     new Date(
                                       plan.monthly_payment_date,
-                                    ).getMonth() + months,
-                                  ),
+                                    ).setMonth(
+                                      new Date(
+                                        plan.monthly_payment_date,
+                                      ).getMonth() + months,
+                                    ),
+                                  )
+                                    .toISOString()
+                                    .split("T")[0],
                                 )
-                                  .toISOString()
-                                  .split("T")[0],
-                              )
-                            : "N/A"}
-                        </p>
+                              : "N/A"}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+
+            {/* ── Pagination ── */}
+            {totalPages > 1 && (
+              <div className="mb-6">
+                <Pagination
+                  page={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalPlans}
+                  pageSize={itemsPerPage}
+                  onPageChange={setCurrentPage}
+                />
+              </div>
+            )}
+          </>
         ) : (
           /* Empty state */
           <div className="mb-6 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-200 bg-white py-16 text-center">

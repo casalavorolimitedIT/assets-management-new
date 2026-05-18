@@ -19,6 +19,7 @@ import {
   Target,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { Pagination } from "../Pagination";
 
 interface InvestmentPlan {
   plan: string;
@@ -449,9 +450,13 @@ function DonutChart({ plans }: { plans: InvestmentPlan[] }) {
 }
 
 export default function UserPortfolio() {
-  const [plans, setPlans] = useState<InvestmentPlan[]>([]);
+  const [allPlans, setAllPlans] = useState<InvestmentPlan[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"all" | string>("all");
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     (async () => {
@@ -474,25 +479,44 @@ export default function UserPortfolio() {
           : c?.investment_plan
             ? [c.investment_plan]
             : [];
-        setPlans(ips);
+        setAllPlans(ips);
+        setCurrentPage(1); // Reset to first page when data loads
       } finally {
         setLoading(false);
       }
     })();
   }, []);
 
-  const totalPrincipal = plans.reduce((s, p) => s + getPrincipal(p), 0);
-  const totalProjected = plans.reduce((s, p) => s + getProjectedReturn(p), 0);
+  // Apply tab filter
+  const filteredPlans =
+    tab === "all" ? allPlans : allPlans.filter((p) => p.plan === tab);
+
+  // Pagination calculations
+  const totalFiltered = filteredPlans.length;
+  const totalPages = Math.ceil(totalFiltered / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentPlans = filteredPlans.slice(startIndex, endIndex);
+
+  // Reset to first page when tab changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [tab]);
+
+  // Calculate metrics from all plans (not paginated)
+  const totalPrincipal = allPlans.reduce((s, p) => s + getPrincipal(p), 0);
+  const totalProjected = allPlans.reduce(
+    (s, p) => s + getProjectedReturn(p),
+    0,
+  );
   const totalGain = totalProjected - totalPrincipal;
   const avgRate =
-    plans.length > 0
-      ? plans.reduce((s, p) => s + (PLAN_META[p.plan]?.rate ?? 0.15), 0) /
-        plans.length
+    allPlans.length > 0
+      ? allPlans.reduce((s, p) => s + (PLAN_META[p.plan]?.rate ?? 0.15), 0) /
+        allPlans.length
       : 0;
 
-  const filtered = tab === "all" ? plans : plans.filter((p) => p.plan === tab);
-
-  const planTypes = Array.from(new Set(plans.map((p) => p.plan)));
+  const planTypes = Array.from(new Set(allPlans.map((p) => p.plan)));
 
   if (loading) {
     return (
@@ -502,7 +526,7 @@ export default function UserPortfolio() {
     );
   }
 
-  if (!plans.length) {
+  if (!allPlans.length) {
     return (
       <div className="flex min-h-96 flex-col items-center justify-center gap-4 text-center">
         <div className="flex size-16 items-center justify-center rounded-2xl bg-zinc-100">
@@ -592,9 +616,9 @@ export default function UserPortfolio() {
             </h3>
           </div>
           <div className="flex items-center gap-6">
-            <DonutChart plans={plans} />
+            <DonutChart plans={allPlans} />
             <div className="flex-1 space-y-2.5">
-              {plans.map((inv) => {
+              {allPlans.map((inv) => {
                 const key = inv.plan.toLowerCase();
                 const meta = PLAN_META[key] ?? PLAN_META.premium;
                 const principal = getPrincipal(inv);
@@ -649,7 +673,7 @@ export default function UserPortfolio() {
             </h3>
           </div>
           <div className="space-y-4">
-            {plans.map((inv, i) => {
+            {allPlans.map((inv, i) => {
               const key = inv.plan.toLowerCase();
               const meta = PLAN_META[key] ?? PLAN_META.premium;
               const maturity = getMaturityDate(inv);
@@ -722,7 +746,7 @@ export default function UserPortfolio() {
           </div>
         </div>
         <div className="space-y-3">
-          {plans.map((inv, i) => {
+          {allPlans.map((inv, i) => {
             const key = inv.plan.toLowerCase();
             const meta = PLAN_META[key] ?? PLAN_META.premium;
             const principal = getPrincipal(inv);
@@ -792,7 +816,7 @@ export default function UserPortfolio() {
             {["all", ...planTypes].map((t) => {
               const label =
                 t === "all"
-                  ? `All Plans (${plans.length})`
+                  ? `All Plans (${allPlans.length})`
                   : (PLAN_META[t]?.label ?? t);
               return (
                 <button
@@ -812,10 +836,27 @@ export default function UserPortfolio() {
         )}
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((inv, i) => (
-            <PlanCard key={i} inv={inv} index={i} />
+          {currentPlans.map((inv, i) => (
+            <PlanCard
+              key={`${inv.plan}-${inv.monthly_payment_date}-${i}`}
+              inv={inv}
+              index={i}
+            />
           ))}
         </div>
+
+        {/* ── Pagination ── */}
+        {totalPages > 1 && (
+          <div className="mt-6">
+            <Pagination
+              page={currentPage}
+              totalPages={totalPages}
+              totalItems={totalFiltered}
+              pageSize={itemsPerPage}
+              onPageChange={setCurrentPage}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -17,8 +17,10 @@ import {
 import { createClient } from "@/lib/supabase/client";
 import { UserProfile } from "@/types";
 import { currency } from "@/types/helpers";
-import { UserDrawer } from "../UserDrawer";
 import { StatCard } from "../StatCard";
+import { Pagination } from "../Pagination";
+
+const PAGE_SIZE = 10;
 
 interface Stats {
   total: number;
@@ -28,8 +30,6 @@ interface Stats {
   totalInvested: number;
   totalUnits: number;
 }
-
-// ─── Birthday helpers ──────────────────────────────────────────────────────
 
 interface BirthdayEntry {
   name: string;
@@ -96,8 +96,6 @@ function formatBirthdayDate(dob: string): string {
   return d.toLocaleDateString("en-NG", { day: "numeric", month: "long" });
 }
 
-// ─── Payout helpers ────────────────────────────────────────────────────────
-
 interface PayoutEntry {
   name: string;
   email: string;
@@ -136,7 +134,6 @@ function getUpcomingPayouts(
       (compliance.investment_plan ? [compliance.investment_plan] : []);
 
     for (const plan of plans) {
-      // Support payout_date, maturity_date, or end_date field names
       const rawDate =
         plan.payout_date ?? plan.maturity_date ?? plan.end_date ?? null;
       if (!rawDate) continue;
@@ -175,8 +172,6 @@ function formatPayoutDate(dateStr: string): string {
   });
 }
 
-// ─── Components ────────────────────────────────────────────────────────────
-
 const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
   const birthdays = getUpcomingBirthdays(users, 30);
 
@@ -207,7 +202,6 @@ const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
             key={i}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3"
           >
-            {/* Days pill */}
             <div
               className={`shrink-0 w-11 h-11 rounded-xl flex flex-col items-center justify-center font-bold ${
                 b.daysUntil === 0
@@ -228,8 +222,6 @@ const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
                 </>
               )}
             </div>
-
-            {/* Details */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <p className="text-xs font-semibold text-gray-900 truncate">
@@ -283,7 +275,6 @@ const UpcomingPayouts = ({ users }: { users: UserProfile[] }) => {
             key={i}
             className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3"
           >
-            {/* Days pill */}
             <div
               className={`shrink-0 w-11 h-11 rounded-xl flex flex-col items-center justify-center font-bold ${
                 p.daysUntil === 0
@@ -304,8 +295,6 @@ const UpcomingPayouts = ({ users }: { users: UserProfile[] }) => {
                 </>
               )}
             </div>
-
-            {/* Details */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
                 <p className="text-xs font-semibold text-gray-900 truncate">
@@ -378,88 +367,148 @@ export const DetailRow = ({
   ) : null;
 
 const AdminDashboard = () => {
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [admins, setAdmins] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
   const [loading, setLoading] = useState(true);
+  const [pageLoading, setPageLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<
     "ALL" | "VERIFIED" | "PENDING" | "REJECTED"
   >("ALL");
   const [selected, setSelected] = useState<UserProfile | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
   const supabase = createClient();
 
-  const fetchUsers = async () => {
-    try {
-      const { data } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("role", "USER")
-        .order("created_at", { ascending: false });
-      if (data) {
-        setUsers(data as UserProfile[]);
-      }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+  const fetchAllUsers = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("role", "USER")
+      .order("created_at", { ascending: false });
+    if (data) setAllUsers(data as UserProfile[]);
   };
 
   const fetchAdmins = async () => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("role", "ADMIN")
+      .order("created_at", { ascending: false });
+    if (data) setAdmins(data as UserProfile[]);
+  };
+
+  const fetchPage = async (
+    targetPage: number,
+    currentSearch: string,
+    currentFilter: string,
+  ) => {
+    setPageLoading(true);
     try {
-      const { data } = await supabase
+      let query = supabase
         .from("profiles")
-        .select("*")
-        .eq("role", "ADMIN")
-        .order("created_at", { ascending: false });
-      if (data) {
-        setAdmins(data as UserProfile[]);
+        .select("*", { count: "exact" })
+        .eq("role", "USER")
+        .order("created_at", { ascending: false })
+        .range((targetPage - 1) * PAGE_SIZE, targetPage * PAGE_SIZE - 1);
+
+      if (currentFilter === "VERIFIED")
+        query = query.eq("metamap_status", "approved");
+      else if (currentFilter === "REJECTED")
+        query = query.eq("metamap_status", "rejected");
+      else if (currentFilter === "PENDING")
+        query = query
+          .neq("metamap_status", "approved")
+          .neq("metamap_status", "rejected");
+
+      if (currentSearch.trim()) {
+        query = query.or(
+          `first_name.ilike.%${currentSearch}%,last_name.ilike.%${currentSearch}%,email.ilike.%${currentSearch}%,phone.ilike.%${currentSearch}%`,
+        );
       }
+
+      const { data, count } = await query;
+      if (data) setUsers(data as UserProfile[]);
+      if (count !== null) setTotalCount(count);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      setPageLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchUsers();
-    fetchAdmins();
+    const init = async () => {
+      setLoading(true);
+      await Promise.all([
+        fetchAllUsers(),
+        fetchAdmins(),
+        fetchPage(1, "", "ALL"),
+      ]);
+      setLoading(false);
+    };
+    init();
   }, []);
 
-  const handleRefresh = () => {
-    setRefreshing(true);
-    fetchUsers();
+  const isFirstRender = React.useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    fetchPage(page, search, filter);
+  }, [page, search, filter]);
+
+  const handleSearch = (value: string) => {
+    setSearch(value);
+    setPage(1);
   };
 
-  const userList = users;
+  const handleFilter = (value: typeof filter) => {
+    setFilter(value);
+    setPage(1);
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([
+      fetchAllUsers(),
+      fetchAdmins(),
+      fetchPage(page, search, filter),
+    ]);
+    setRefreshing(false);
+  };
+
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
+
+  // Stats computed from ALL users (not just the current page)
   const stats: Stats = {
-    total: userList.length,
-    verified: userList.filter((u) => u.metamap_status === "approved").length,
-    pending: userList.filter((u) => u.metamap_status !== "approved").length,
+    total: allUsers.length,
+    verified: allUsers.filter((u) => u.metamap_status === "approved").length,
+    pending: allUsers.filter(
+      (u) => u.metamap_status !== "approved" && u.metamap_status !== "rejected",
+    ).length,
     admins: admins.length,
-    totalInvested: userList.reduce((sum, u) => {
+    totalInvested: allUsers.reduce((sum, u) => {
       const c =
         typeof u.compliance === "string"
           ? JSON.parse(u.compliance ?? "{}")
           : u.compliance;
-
       const plans: any[] = c?.investment_plans ?? [];
-
       const plansTotal = plans.reduce((s: number, p: any) => {
-        const amount = p.total_figures ?? p.monthly_amount_figures ?? 0;
-        return s + amount;
+        return s + (p.total_figures ?? p.monthly_amount_figures ?? 0);
       }, 0);
-
       const legacyTotal =
         !c?.investment_plans && c?.investment_plan
           ? (c.investment_plan.total_figures ??
             c.investment_plan.monthly_amount_figures ??
             0)
           : 0;
-
       return sum + plansTotal + legacyTotal;
     }, 0),
-    totalUnits: userList.reduce((sum, u) => {
+    totalUnits: allUsers.reduce((sum, u) => {
       const c =
         typeof u.compliance === "string"
           ? JSON.parse(u.compliance ?? "{}")
@@ -469,24 +518,6 @@ const AdminDashboard = () => {
       return sum + plans.reduce((s: number, p: any) => s + (p.units ?? 0), 0);
     }, 0),
   };
-
-  const filtered = users.filter((u) => {
-    const q = search.toLowerCase();
-    const matchSearch =
-      !q ||
-      u.first_name?.toLowerCase().includes(q) ||
-      u.last_name?.toLowerCase().includes(q) ||
-      u.email?.toLowerCase().includes(q) ||
-      u.phone?.includes(q);
-    const matchFilter =
-      filter === "ALL" ||
-      (filter === "VERIFIED" && u.metamap_status === "approved") ||
-      (filter === "REJECTED" && u.metamap_status === "rejected") ||
-      (filter === "PENDING" &&
-        u.metamap_status !== "approved" &&
-        u.metamap_status !== "rejected");
-    return matchSearch && matchFilter;
-  });
 
   if (loading) {
     return (
@@ -520,10 +551,10 @@ const AdminDashboard = () => {
         </p>
       </div>
 
-      {/* Birthdays + Payouts — side by side */}
+      {/* Birthdays + Payouts — use allUsers so they're never paginated */}
       <div className="grid grid-cols-2 gap-3 mb-6">
-        <UpcomingBirthdays users={users} />
-        <UpcomingPayouts users={users} />
+        <UpcomingBirthdays users={allUsers} />
+        <UpcomingPayouts users={allUsers} />
       </div>
 
       {/* Stats Grid */}
@@ -567,7 +598,7 @@ const AdminDashboard = () => {
           />
           <input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search by name, email or phone…"
             className="w-full pl-9 pr-4 py-2.5 text-sm rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent shadow-sm"
           />
@@ -576,7 +607,7 @@ const AdminDashboard = () => {
           {(["ALL", "VERIFIED", "PENDING", "REJECTED"] as const).map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
+              onClick={() => handleFilter(f)}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${
                 filter === f
                   ? "bg-slate-900 text-white"
@@ -590,13 +621,15 @@ const AdminDashboard = () => {
       </div>
 
       {/* User list */}
-      <div className="space-y-2 mb-8">
-        {filtered.length === 0 && (
+      <div
+        className={`space-y-2 mb-4 transition-opacity duration-150 ${pageLoading ? "opacity-50 pointer-events-none" : ""}`}
+      >
+        {users.length === 0 && !pageLoading && (
           <div className="text-center py-12 text-gray-400 text-sm">
             No users match your search.
           </div>
         )}
-        {filtered.map((user) => {
+        {users.map((user) => {
           const compliance =
             typeof user.compliance === "string"
               ? JSON.parse(user.compliance ?? "{}")
@@ -616,13 +649,10 @@ const AdminDashboard = () => {
               onClick={() => setSelected(user)}
               className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-3 hover:border-primary/20 transition-colors cursor-pointer active:scale-[0.99]"
             >
-              {/* Avatar */}
               <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
                 {user.first_name?.[0]}
                 {user.last_name?.[0]}
               </div>
-
-              {/* Info */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold text-gray-900 truncate">
@@ -650,10 +680,14 @@ const AdminDashboard = () => {
         })}
       </div>
 
-      {/* Drawer */}
-      {selected && (
-        <UserDrawer user={selected} onClose={() => setSelected(null)} />
-      )}
+      {/* Pagination */}
+      <Pagination
+        page={page}
+        totalPages={totalPages}
+        totalItems={totalCount}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+      />
     </div>
   );
 };

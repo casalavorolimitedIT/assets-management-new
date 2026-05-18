@@ -1,6 +1,12 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -28,6 +34,7 @@ import {
 import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 import type { Compliance, InvestmentPlan, UserProfile } from "@/types";
+import { Pagination } from "../Pagination";
 
 type PortfolioFilter = "ALL" | "FUNDED" | "VERIFIED" | "PENDING";
 
@@ -79,6 +86,8 @@ const PLAN_META: Record<
     description: "Real Estate Investment Fund",
   },
 };
+
+const PAGE_SIZE = 10; // Items per page
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-NG", {
@@ -511,6 +520,9 @@ export default function AdminPortfolio() {
   const [filter, setFilter] = useState<PortfolioFilter>("ALL");
   const [tab, setTab] = useState<"all" | string>("all");
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+
   const fetchPortfolios = useCallback(async () => {
     setError(null);
     try {
@@ -540,6 +552,11 @@ export default function AdminPortfolio() {
   useEffect(() => {
     void fetchPortfolios();
   }, [fetchPortfolios]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filter, tab]);
 
   const searchedPortfolios = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -572,10 +589,19 @@ export default function AdminPortfolio() {
     plans.map((plan) => ({ plan, owner: user })),
   );
 
-  const plans =
+  const plansByTab =
     tab === "all"
       ? visiblePlans
       : visiblePlans.filter(({ plan }) => plan.plan === tab);
+
+  // Pagination for plans
+  const totalItems = plansByTab.length;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const paginatedPlans = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return plansByTab.slice(start, end);
+  }, [plansByTab, currentPage]);
 
   const allVisiblePlans = visiblePlans.map(({ plan }) => plan);
   const totalPrincipal = allVisiblePlans.reduce(
@@ -603,6 +629,12 @@ export default function AdminPortfolio() {
   const handleRefresh = () => {
     setRefreshing(true);
     void fetchPortfolios();
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Optional: Scroll to top when page changes
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   if (loading) {
@@ -849,9 +881,7 @@ export default function AdminPortfolio() {
                               color: meta.color,
                             }}
                           >
-                            {daysLeft > 0
-                              ? `${daysLeft} days left`
-                              : "Matured"}
+                            {daysLeft > 0 ? `${daysLeft} days left` : "Matured"}
                           </span>
                         </div>
                         <p className="mt-0.5 text-[10px] text-zinc-400">
@@ -983,7 +1013,7 @@ export default function AdminPortfolio() {
             )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {plans.map(({ plan, owner }, i) => (
+              {paginatedPlans.map(({ plan, owner }, i) => (
                 <PlanCard
                   key={`${owner.id}-${plan.plan}-${i}`}
                   inv={plan}
@@ -992,6 +1022,19 @@ export default function AdminPortfolio() {
                 />
               ))}
             </div>
+
+            {/* Pagination Component */}
+            {totalPages > 1 && (
+              <div className="mt-8">
+                <Pagination
+                  page={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
           </div>
         </>
       )}

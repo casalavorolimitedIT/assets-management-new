@@ -23,6 +23,7 @@ import {
 import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 import type { Compliance, InvestmentPlan, UserProfile } from "@/types";
+import { Pagination } from "../Pagination";
 
 type UserFilter = "ALL" | "VERIFIED" | "PENDING" | "FUNDED";
 
@@ -38,6 +39,8 @@ const PLAN_LABELS: Record<string, string> = {
   premium_plus: "Premium Plus",
   reif: "REIF",
 };
+
+const PAGE_SIZE = 10;
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("en-NG", {
@@ -165,7 +168,9 @@ function StatCard({
           </p>
           <p className="mt-1 text-xs text-zinc-500">{sub}</p>
         </div>
-        <div className={`flex size-10 items-center justify-center rounded-xl ${tone}`}>
+        <div
+          className={`flex size-10 items-center justify-center rounded-xl ${tone}`}
+        >
           {icon}
         </div>
       </div>
@@ -181,6 +186,9 @@ export default function InvestmentDetailsAdmin() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<UserFilter>("ALL");
   const [selected, setSelected] = useState<UserProfile | null>(null);
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchUsers = useCallback(async () => {
     setError(null);
@@ -209,6 +217,11 @@ export default function InvestmentDetailsAdmin() {
     void fetchUsers();
   }, [fetchUsers]);
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filter]);
+
   const stats = useMemo(() => {
     const verified = users.filter((user) =>
       isMetamapVerified(user.metamap_status),
@@ -216,7 +229,11 @@ export default function InvestmentDetailsAdmin() {
     const funded = users.filter((user) => getPlans(user).length > 0).length;
     const totalCapital = users.reduce(
       (sum, user) =>
-        sum + getPlans(user).reduce((planSum, plan) => planSum + getPlanAmount(plan), 0),
+        sum +
+        getPlans(user).reduce(
+          (planSum, plan) => planSum + getPlanAmount(plan),
+          0,
+        ),
       0,
     );
 
@@ -256,6 +273,15 @@ export default function InvestmentDetailsAdmin() {
     });
   }, [filter, search, users]);
 
+  // Pagination calculations
+  const totalItems = filteredUsers.length;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const paginatedUsers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return filteredUsers.slice(start, end);
+  }, [filteredUsers, currentPage]);
+
   const openUser = (user: UserProfile) => {
     setSelected(user);
   };
@@ -263,6 +289,12 @@ export default function InvestmentDetailsAdmin() {
   const handleRefresh = () => {
     setRefreshing(true);
     void fetchUsers();
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Optional: Scroll to top when page changes
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   if (loading) {
@@ -378,7 +410,7 @@ export default function InvestmentDetailsAdmin() {
           <span />
         </div>
 
-        {filteredUsers.length === 0 ? (
+        {paginatedUsers.length === 0 ? (
           <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
             <UserRound className="mb-3 size-9 text-zinc-300" />
             <p className="text-sm font-semibold text-zinc-600">
@@ -389,64 +421,77 @@ export default function InvestmentDetailsAdmin() {
             </p>
           </div>
         ) : (
-          filteredUsers.map((user) => {
-            const plans = getPlans(user);
-            const totalInvested = plans.reduce(
-              (sum, plan) => sum + getPlanAmount(plan),
-              0,
-            );
+          <>
+            {paginatedUsers.map((user) => {
+              const plans = getPlans(user);
+              const totalInvested = plans.reduce(
+                (sum, plan) => sum + getPlanAmount(plan),
+                0,
+              );
 
-            return (
-              <button
-                key={user.id}
-                onClick={() => openUser(user)}
-                className="grid w-full gap-3 border-b border-zinc-100 px-4 py-4 text-left transition-colors last:border-b-0 hover:bg-zinc-50 lg:grid-cols-[minmax(260px,1.5fr)_130px_150px_140px_56px] lg:items-center"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#fff1e6] text-sm font-bold text-[#ff6900]">
-                    {getInitials(user)}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-zinc-950">
-                      {getUserName(user)}
-                    </p>
-                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-                      <span className="inline-flex items-center gap-1">
-                        <Mail className="size-3" />
-                        {user.email}
-                      </span>
-                      {user.phone && (
+              return (
+                <button
+                  key={user.id}
+                  onClick={() => openUser(user)}
+                  className="grid w-full gap-3 border-b border-zinc-100 px-4 py-4 text-left transition-colors last:border-b-0 hover:bg-zinc-50 lg:grid-cols-[minmax(260px,1.5fr)_130px_150px_140px_56px] lg:items-center"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[#fff1e6] text-sm font-bold text-[#ff6900]">
+                      {getInitials(user)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-zinc-950">
+                        {getUserName(user)}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
                         <span className="inline-flex items-center gap-1">
-                          <Phone className="size-3" />
-                          {user.phone}
+                          <Mail className="size-3" />
+                          {user.email}
                         </span>
-                      )}
+                        {user.phone && (
+                          <span className="inline-flex items-center gap-1">
+                            <Phone className="size-3" />
+                            {user.phone}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div>
-                  <StatusBadge user={user} />
-                </div>
+                  <div>
+                    <StatusBadge user={user} />
+                  </div>
 
-                <div className="text-sm">
-                  <p className="font-semibold text-zinc-900">
-                    {formatCurrency(totalInvested)}
-                  </p>
-                  <p className="text-xs text-zinc-400">
-                    {plans.length} plan{plans.length === 1 ? "" : "s"}
-                  </p>
-                </div>
+                  <div className="text-sm">
+                    <p className="font-semibold text-zinc-900">
+                      {formatCurrency(totalInvested)}
+                    </p>
+                    <p className="text-xs text-zinc-400">
+                      {plans.length} plan{plans.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
 
-                <div className="inline-flex items-center gap-1 text-xs text-zinc-500">
-                  <CalendarDays className="size-3.5" />
-                  {formatDate(user.created_at)}
-                </div>
+                  <div className="inline-flex items-center gap-1 text-xs text-zinc-500">
+                    <CalendarDays className="size-3.5" />
+                    {formatDate(user.created_at)}
+                  </div>
 
-                <ChevronRight className="hidden size-4 text-zinc-300 lg:block" />
-              </button>
-            );
-          })
+                  <ChevronRight className="hidden size-4 text-zinc-300 lg:block" />
+                </button>
+              );
+            })}
+
+            {/* Pagination Component */}
+            <div className="border-t border-zinc-200 px-4 py-3">
+              <Pagination
+                page={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                pageSize={PAGE_SIZE}
+                onPageChange={handlePageChange}
+              />
+            </div>
+          </>
         )}
       </div>
 
@@ -488,110 +533,140 @@ export default function InvestmentDetailsAdmin() {
 
                 return (
                   <>
-              <div className="mb-5 flex flex-wrap items-center gap-2">
-                <StatusBadge user={selected} />
-              </div>
-
-              <section className="mb-6">
-                <h3 className="mb-3 text-sm font-semibold text-zinc-950">
-                  Profile
-                </h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <ReadOnlyField label="Full name" value={getUserName(selected)} />
-                  <ReadOnlyField label="Email" value={selected.email} />
-                  <ReadOnlyField label="Phone" value={selected.phone} />
-                  <ReadOnlyField
-                    label="Member since"
-                    value={formatDate(selected.created_at)}
-                  />
-                  <ReadOnlyField
-                    label="Last updated"
-                    value={formatDate(selected.updated_at)}
-                  />
-                </div>
-              </section>
-
-              <section className="mb-6">
-                <h3 className="mb-3 text-sm font-semibold text-zinc-950">
-                  Personal & Bio Data
-                </h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <ReadOnlyField label="Gender" value={personal?.gender} />
-                  <ReadOnlyField label="Nationality" value={personal?.nationality} />
-                  <ReadOnlyField label="Means of ID" value={personal?.means_of_id} />
-                  <ReadOnlyField label="ID number" value={personal?.id_number} />
-                  <ReadOnlyField label="Occupation" value={personal?.occupation} />
-                  <ReadOnlyField label="Job title" value={personal?.job_title} />
-                  <ReadOnlyField
-                    label="Date of birth"
-                    value={formatDate(bio?.date_of_birth)}
-                  />
-                  <ReadOnlyField label="State of origin" value={bio?.state_of_origin} />
-                  <ReadOnlyField label="LGA" value={bio?.lga} />
-                  <ReadOnlyField
-                    label="Employment type"
-                    value={bio?.employment_type?.join(", ")}
-                  />
-                </div>
-              </section>
-
-              <section className="mb-6">
-                <h3 className="mb-3 text-sm font-semibold text-zinc-950">
-                  Next of Kin & Bank
-                </h3>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <ReadOnlyField label="Next of kin" value={bio?.next_of_kin} />
-                  <ReadOnlyField
-                    label="Next of kin phone"
-                    value={bio?.next_of_kin_phone}
-                  />
-                  <ReadOnlyField
-                    label="Next of kin address"
-                    value={bio?.next_of_kin_address}
-                  />
-                  <ReadOnlyField label="Bank" value={bank?.bank_name} />
-                  <ReadOnlyField label="Account name" value={bank?.account_name} />
-                  <ReadOnlyField
-                    label="Account number"
-                    value={bank?.account_number}
-                  />
-                </div>
-              </section>
-
-              <section>
-                <h3 className="mb-3 text-sm font-semibold text-zinc-950">
-                  Investment Plans
-                </h3>
-                <div className="space-y-3">
-                  {plans.length === 0 ? (
-                    <div className="rounded-xl border border-dashed border-zinc-200 py-8 text-center text-sm text-zinc-400">
-                      No submitted investment plan.
+                    <div className="mb-5 flex flex-wrap items-center gap-2">
+                      <StatusBadge user={selected} />
                     </div>
-                  ) : (
-                    plans.map((plan, index) => (
-                      <div
-                        key={`${plan.plan}-${index}`}
-                        className="rounded-xl border border-zinc-200 bg-zinc-50 p-4"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-zinc-950">
-                              {PLAN_LABELS[plan.plan] ?? plan.plan}
-                            </p>
-                            <p className="mt-1 text-xs text-zinc-500">
-                              {plan.tenor ?? "No tenor"} ·{" "}
-                              {plan.mode_of_payment ?? "No payment mode"}
-                            </p>
-                          </div>
-                          <p className="text-sm font-bold text-zinc-950">
-                            {formatCurrency(getPlanAmount(plan))}
-                          </p>
-                        </div>
+
+                    <section className="mb-6">
+                      <h3 className="mb-3 text-sm font-semibold text-zinc-950">
+                        Profile
+                      </h3>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <ReadOnlyField
+                          label="Full name"
+                          value={getUserName(selected)}
+                        />
+                        <ReadOnlyField label="Email" value={selected.email} />
+                        <ReadOnlyField label="Phone" value={selected.phone} />
+                        <ReadOnlyField
+                          label="Member since"
+                          value={formatDate(selected.created_at)}
+                        />
+                        <ReadOnlyField
+                          label="Last updated"
+                          value={formatDate(selected.updated_at)}
+                        />
                       </div>
-                    ))
-                  )}
-                </div>
-              </section>
+                    </section>
+
+                    <section className="mb-6">
+                      <h3 className="mb-3 text-sm font-semibold text-zinc-950">
+                        Personal & Bio Data
+                      </h3>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <ReadOnlyField
+                          label="Gender"
+                          value={personal?.gender}
+                        />
+                        <ReadOnlyField
+                          label="Nationality"
+                          value={personal?.nationality}
+                        />
+                        <ReadOnlyField
+                          label="Means of ID"
+                          value={personal?.means_of_id}
+                        />
+                        <ReadOnlyField
+                          label="ID number"
+                          value={personal?.id_number}
+                        />
+                        <ReadOnlyField
+                          label="Occupation"
+                          value={personal?.occupation}
+                        />
+                        <ReadOnlyField
+                          label="Job title"
+                          value={personal?.job_title}
+                        />
+                        <ReadOnlyField
+                          label="Date of birth"
+                          value={formatDate(bio?.date_of_birth)}
+                        />
+                        <ReadOnlyField
+                          label="State of origin"
+                          value={bio?.state_of_origin}
+                        />
+                        <ReadOnlyField label="LGA" value={bio?.lga} />
+                        <ReadOnlyField
+                          label="Employment type"
+                          value={bio?.employment_type?.join(", ")}
+                        />
+                      </div>
+                    </section>
+
+                    <section className="mb-6">
+                      <h3 className="mb-3 text-sm font-semibold text-zinc-950">
+                        Next of Kin & Bank
+                      </h3>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <ReadOnlyField
+                          label="Next of kin"
+                          value={bio?.next_of_kin}
+                        />
+                        <ReadOnlyField
+                          label="Next of kin phone"
+                          value={bio?.next_of_kin_phone}
+                        />
+                        <ReadOnlyField
+                          label="Next of kin address"
+                          value={bio?.next_of_kin_address}
+                        />
+                        <ReadOnlyField label="Bank" value={bank?.bank_name} />
+                        <ReadOnlyField
+                          label="Account name"
+                          value={bank?.account_name}
+                        />
+                        <ReadOnlyField
+                          label="Account number"
+                          value={bank?.account_number}
+                        />
+                      </div>
+                    </section>
+
+                    <section>
+                      <h3 className="mb-3 text-sm font-semibold text-zinc-950">
+                        Investment Plans
+                      </h3>
+                      <div className="space-y-3">
+                        {plans.length === 0 ? (
+                          <div className="rounded-xl border border-dashed border-zinc-200 py-8 text-center text-sm text-zinc-400">
+                            No submitted investment plan.
+                          </div>
+                        ) : (
+                          plans.map((plan, index) => (
+                            <div
+                              key={`${plan.plan}-${index}`}
+                              className="rounded-xl border border-zinc-200 bg-zinc-50 p-4"
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-semibold text-zinc-950">
+                                    {PLAN_LABELS[plan.plan] ?? plan.plan}
+                                  </p>
+                                  <p className="mt-1 text-xs text-zinc-500">
+                                    {plan.tenor ?? "No tenor"} ·{" "}
+                                    {plan.mode_of_payment ?? "No payment mode"}
+                                  </p>
+                                </div>
+                                <p className="text-sm font-bold text-zinc-950">
+                                  {formatCurrency(getPlanAmount(plan))}
+                                </p>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </section>
                   </>
                 );
               })()}

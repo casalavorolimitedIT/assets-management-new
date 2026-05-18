@@ -15,35 +15,44 @@ export interface Notification {
   href?: string;
 }
 
-export function useNotifications(userId: string) {
+export function useNotifications(userId: string, isAdmin = false) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
   const fetchNotifications = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("notifications")
-      .select("*")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(20);
+    const { data, error } = isAdmin
+      ? await supabase
+          .from("notifications")
+          .select("*")
+          .eq("forAdmin", true)
+          .order("created_at", { ascending: false })
+          .limit(10)
+      : await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("forAdmin", false)
+          .order("created_at", { ascending: false })
+          .limit(10);
 
     if (!error && data) setNotifications(data);
+    console.log(data)
     setLoading(false);
-  }, [userId, supabase]);
+  }, [userId, isAdmin, supabase]);
 
   useEffect(() => {
     fetchNotifications();
 
     const channel = supabase
-      .channel(`notifications:${userId}`)
+      .channel(`notifications:${isAdmin ? "admin" : userId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "notifications",
-          filter: `user_id=eq.${userId}`,
+          filter: isAdmin ? "forAdmin=eq.true" : `user_id=eq.${userId}`,
         },
         (payload) => {
           if (payload.eventType === "INSERT") {

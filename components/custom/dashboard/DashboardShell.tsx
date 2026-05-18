@@ -274,7 +274,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
             <Menu className="size-5" />
           </button>
           <div className="flex items-center gap-4 ml-auto">
-            <NotificationDropdown userId={user.id} />
+            <NotificationDropdown userId={user.id} isAdmin={isAdmin} />
 
             {isAdmin ? (
               <div className="hidden sm:flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-medium text-zinc-700">

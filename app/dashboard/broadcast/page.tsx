@@ -11,6 +11,7 @@ import {
   NotificationForm,
 } from "@/components/custom/broadcast/Forms";
 import { SelectionBanner } from "@/components/custom/broadcast/SelectionBanner";
+import { Pagination } from "@/components/custom/Pagination";
 
 export type Tab = "email" | "notification";
 export type NotifType = "info" | "success" | "warning" | "error";
@@ -31,6 +32,8 @@ export interface Filter {
   dateRange: "all" | "7d" | "30d" | "90d";
   activeOnly: boolean;
 }
+
+const PAGE_SIZE = 10;
 const supabase = createClient();
 
 function Toast({
@@ -103,6 +106,7 @@ const BroadcastPage = () => {
   } | null>(null);
   const [roles, setRoles] = useState<string[]>([]);
   const [filters, setFilters] = useState<Filter>(DEFAULT_FILTERS);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Fetch users
   useEffect(() => {
@@ -157,6 +161,18 @@ const BroadcastPage = () => {
     setFilteredUsers(result);
   }, [users, filters]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  const totalItems = filteredUsers.length;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const paginatedUsers = React.useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return filteredUsers.slice(start, end);
+  }, [filteredUsers, currentPage]);
+
   const handleFilterChange = (partial: Partial<Filter>) =>
     setFilters((f) => ({ ...f, ...partial }));
 
@@ -168,16 +184,16 @@ const BroadcastPage = () => {
     });
 
   const handleToggleAll = () => {
-    if (filteredUsers.every((u) => selected.has(u.id))) {
+    if (paginatedUsers.every((u) => selected.has(u.id))) {
       setSelected((prev) => {
         const n = new Set(prev);
-        filteredUsers.forEach((u) => n.delete(u.id));
+        paginatedUsers.forEach((u) => n.delete(u.id));
         return n;
       });
     } else {
       setSelected((prev) => {
         const n = new Set(prev);
-        filteredUsers.forEach((u) => n.add(u.id));
+        paginatedUsers.forEach((u) => n.add(u.id));
         return n;
       });
     }
@@ -187,6 +203,11 @@ const BroadcastPage = () => {
     setSelected(new Set(filteredUsers.map((u) => u.id)));
   const handleClear = () => setSelected(new Set());
   const selectedUsers = filteredUsers.filter((u) => selected.has(u.id));
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const handleSendEmail = useCallback(
     async (subject: string, body: string) => {
@@ -310,12 +331,25 @@ const BroadcastPage = () => {
             />
 
             <UserTable
-              users={filteredUsers}
+              users={paginatedUsers}
               selected={selected}
               onToggle={handleToggle}
               onToggleAll={handleToggleAll}
               loading={loadingUsers}
             />
+
+            {/* Pagination Component */}
+            {totalPages > 1 && (
+              <div className="mt-4">
+                <Pagination
+                  page={currentPage}
+                  totalPages={totalPages}
+                  totalItems={totalItems}
+                  pageSize={PAGE_SIZE}
+                  onPageChange={handlePageChange}
+                />
+              </div>
+            )}
           </section>
 
           {/* Right — Compose panel */}

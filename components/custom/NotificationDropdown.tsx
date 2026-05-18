@@ -44,7 +44,6 @@ const TYPE_CONFIG = {
 
 interface NotificationDropdownProps {
   userId: string;
-  /** Pass true if the current user has the admin role */
   isAdmin?: boolean;
 }
 
@@ -54,13 +53,10 @@ export function NotificationDropdown({
 }: NotificationDropdownProps) {
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  console.log("[NotificationDropdown]", { userId, isAdmin });
   const { notifications, loading, markAsRead, markAllAsRead } =
-    useNotifications(userId);
-  const visibleNotifications = notifications.filter((n: Notification) => {
-    if (n.forAdmin === true) return isAdmin;
-    if (n.forAdmin === false) return !isAdmin;
-    return true;
-  });
+    useNotifications(userId, isAdmin);
+  const visibleNotifications = notifications;
 
   const unreadCount = visibleNotifications.filter(
     (n: Notification) => !n.read,

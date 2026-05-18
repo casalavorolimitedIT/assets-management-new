@@ -251,10 +251,6 @@ const step3Schema = Yup.object({
   investmentPlan: Yup.string()
     .oneOf(["premium_plus", "premium", "reif"], "Select an investment plan")
     .required("Select an investment plan"),
-  ppInvestmentType: Yup.string().when("investmentPlan", {
-    is: "premium_plus",
-    then: (s) => s.required("Investment type is required"),
-  }),
   ppAmountFigures: Yup.string().when("investmentPlan", {
     is: "premium_plus",
     then: (s) => s.required("Amount (figures) is required"),
@@ -375,7 +371,6 @@ async function submitVerification(
   const investmentPlanPayload: Record<string, unknown> = {
     plan: values.investmentPlan,
     ...(values.investmentPlan === "premium_plus" && {
-      investment_type: values.investmentPlan,
       amount_figures: values.ppAmountFigures
         ? Number(values.ppAmountFigures)
         : null,
@@ -478,7 +473,6 @@ async function submitVerification(
 
   if (updateErr) throw new Error(updateErr.message);
 
-  // 3. Insert transaction record
   await insertTransaction({
     user_id: uid,
     plan: values.investmentPlan,
@@ -515,6 +509,48 @@ async function submitVerification(
     units:
       values.investmentPlan === "reif" ? Number(values.reifUnits) : undefined,
   });
+
+  const { data: profileForName } = await supabase
+    .from("profiles")
+    .select("first_name")
+    .eq("id", uid)
+    .single();
+
+  const displayName =
+    profileForName?.first_name?.trim() || user.email?.split("@")[0] || "A user";
+
+  const planLabels: Record<string, string> = {
+    premium_plus: "Premium Plus",
+    premium: "Premium",
+    reif: "REIF",
+  };
+  const planLabel = planLabels[values.investmentPlan] ?? values.investmentPlan;
+
+  const [{ error: adminNotifErr }, { error: userNotifErr }] = await Promise.all(
+    [
+      supabase.from("notifications").insert({
+        user_id: uid,
+        title: "New Investment Submitted",
+        message: `${displayName} has submitted a ${planLabel} investment plan and it is pending review.`,
+        type: "success",
+        read: false,
+        forAdmin: true,
+      }),
+      supabase.from("notifications").insert({
+        user_id: uid,
+        title: "Investment Submitted",
+        message: `Your ${planLabel} investment plan has been submitted successfully and is pending review.`,
+        type: "success",
+        read: false,
+        forAdmin: false,
+      }),
+    ],
+  );
+
+  if (adminNotifErr)
+    console.error("Failed to send admin notification:", adminNotifErr.message);
+  if (userNotifErr)
+    console.error("Failed to send user notification:", userNotifErr.message);
 
   return { uid, email: user.email ?? values.email };
 }
@@ -703,7 +739,6 @@ function DraftRestoredBanner({ onDismiss }: { onDismiss: () => void }) {
   );
 }
 
-
 export default function VerificationForm({
   prefillEmail,
   prefillPhone,
@@ -718,7 +753,6 @@ export default function VerificationForm({
     email: string;
   } | null>(null);
   const [metamapDone, setMetamapDone] = React.useState(false);
-
   const [draftRestored, setDraftRestored] = React.useState(false);
   const [bannerVisible, setBannerVisible] = React.useState(false);
 
@@ -1422,16 +1456,6 @@ function StepThree({ formik, fieldError }: StepProps) {
         <div className="space-y-4 rounded-xl border border-border bg-muted/20 p-5">
           <p className={`${labelCls} text-primary`}>Premium Plus Details</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <FieldGroup
-              label="Investment Type"
-              error={fieldError("ppInvestmentType")}
-            >
-              <Input
-                className={inputCls}
-                placeholder="e.g. Fixed Deposit"
-                {...formik.getFieldProps("ppInvestmentType")}
-              />
-            </FieldGroup>
             <FieldGroup
               label="Investment Amount (Figures)"
               error={fieldError("ppAmountFigures")}

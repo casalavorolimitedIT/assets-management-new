@@ -22,6 +22,7 @@ import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 import type { UserProfile } from "@/types";
 import type { Transaction, TxStatus } from "./UserTransactions";
+import { Pagination } from "../Pagination";
 
 interface AdminTransaction extends Transaction {
   user?: UserProfile;
@@ -80,6 +81,8 @@ const STATUS_META: Record<
     dot: "bg-red-400",
   },
 };
+
+const PAGE_SIZE = 10;
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-NG", {
@@ -304,18 +307,23 @@ export default function AdminTransactions() {
     "all" | "verified" | "pending"
   >("all");
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+
   const fetchTransactions = useCallback(async () => {
     setFetchError(null);
     try {
       const supabase = createClient();
-      const [{ data: txData, error: txError }, { data: profileData, error: profileError }] =
-        await Promise.all([
-          supabase
-            .from("transactions")
-            .select("*")
-            .order("created_at", { ascending: false }),
-          supabase.from("profiles").select("*"),
-        ]);
+      const [
+        { data: txData, error: txError },
+        { data: profileData, error: profileError },
+      ] = await Promise.all([
+        supabase
+          .from("transactions")
+          .select("*")
+          .order("created_at", { ascending: false }),
+        supabase.from("profiles").select("*"),
+      ]);
 
       if (txError) throw txError;
       if (profileError) throw profileError;
@@ -344,6 +352,11 @@ export default function AdminTransactions() {
     void fetchTransactions();
   }, [fetchTransactions]);
 
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, filterStatus, filterPlan, filterVerification]);
+
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -367,8 +380,7 @@ export default function AdminTransactions() {
         .toLowerCase();
 
       const matchSearch = !query || searchable.includes(query);
-      const matchStatus =
-        filterStatus === "all" || tx.status === filterStatus;
+      const matchStatus = filterStatus === "all" || tx.status === filterStatus;
       const matchPlan = filterPlan === "all" || tx.plan === filterPlan;
       const verified = isMetamapVerified(tx.user?.metamap_status);
       const matchVerification =
@@ -376,14 +388,32 @@ export default function AdminTransactions() {
         (filterVerification === "verified" && verified) ||
         (filterVerification === "pending" && !verified);
 
-      return (
-        matchSearch &&
-        matchStatus &&
-        matchPlan &&
-        matchVerification
-      );
+      return matchSearch && matchStatus && matchPlan && matchVerification;
     });
   }, [filterPlan, filterStatus, filterVerification, search, transactions]);
+
+  // Pagination calculations
+  const totalItems = filtered.length;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE);
+  const paginatedTransactions = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    const end = start + PAGE_SIZE;
+    return filtered.slice(start, end);
+  }, [filtered, currentPage]);
+
+  // Group paginated transactions by day
+  const grouped = paginatedTransactions.reduce<
+    Record<string, AdminTransaction[]>
+  >((acc, tx) => {
+    const day = new Date(tx.created_at).toLocaleDateString("en-NG", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+    (acc[day] ??= []).push(tx);
+    return acc;
+  }, {});
 
   const totalInvested = filtered
     .filter((tx) => tx.type === "investment")
@@ -394,20 +424,6 @@ export default function AdminTransactions() {
     (tx) => tx.status === "completed",
   ).length;
 
-  const grouped = filtered.reduce<Record<string, AdminTransaction[]>>(
-    (acc, tx) => {
-      const day = new Date(tx.created_at).toLocaleDateString("en-NG", {
-        weekday: "long",
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      });
-      (acc[day] ??= []).push(tx);
-      return acc;
-    },
-    {},
-  );
-
   const isFiltered =
     search !== "" ||
     filterStatus !== "all" ||
@@ -417,6 +433,11 @@ export default function AdminTransactions() {
   const handleRefresh = () => {
     setRefreshing(true);
     void fetchTransactions();
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const approvePayment = async (tx: AdminTransaction) => {
@@ -441,10 +462,37 @@ export default function AdminTransactions() {
       setTransactions((current) =>
         current.map((item) =>
           item.id === tx.id
-            ? ({ ...(data as Transaction), user: item.user } as AdminTransaction)
+            ? ({
+                ...(data as Transaction),
+                user: item.user,
+              } as AdminTransaction)
             : item,
         ),
       );
+
+      const planLabels: Record<string, string> = {
+        premium_plus: "Premium Plus",
+        premium: "Premium",
+        reif: "REIF",
+      };
+      const planLabel = planLabels[tx.plan] ?? tx.plan;
+
+      const { error: notifErr } = await supabase.from("notifications").insert({
+        user_id: tx.user_id,
+        title: "Payment Approved",
+        message: `Your ${planLabel} investment payment has been approved and is now active.`,
+        type: "success",
+        read: false,
+        forAdmin: false,
+      });
+
+      if (notifErr) {
+        console.error(
+          "Failed to send approval notification:",
+          notifErr.message,
+        );
+      }
+
       setNotice("Payment approved and transaction marked active.");
     } catch (err) {
       setActionError(
@@ -472,7 +520,9 @@ export default function AdminTransactions() {
           onClick={handleRefresh}
           className="flex items-center gap-2 rounded-xl border border-zinc-200 px-4 py-2 text-xs font-semibold text-zinc-600 transition-colors hover:bg-zinc-50"
         >
-          <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`size-3.5 ${refreshing ? "animate-spin" : ""}`}
+          />
           Retry
         </button>
       </div>
@@ -497,7 +547,9 @@ export default function AdminTransactions() {
           onClick={handleRefresh}
           className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50"
         >
-          <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`size-3.5 ${refreshing ? "animate-spin" : ""}`}
+          />
           Refresh
         </button>
       </div>
@@ -580,21 +632,19 @@ export default function AdminTransactions() {
 
           <div className="flex items-center gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-white p-1 shadow-sm">
             <Filter className="ml-2 size-3.5 shrink-0 text-zinc-400" />
-            {(["all", "pending", "active", "failed"] as const).map(
-              (status) => (
-                <button
-                  key={status}
-                  onClick={() => setFilterStatus(status)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-all ${
-                    filterStatus === status
-                      ? "bg-zinc-900 text-white shadow-sm"
-                      : "text-zinc-500 hover:text-zinc-700"
-                  }`}
-                >
-                  {status}
-                </button>
-              ),
-            )}
+            {(["all", "pending", "active", "failed"] as const).map((status) => (
+              <button
+                key={status}
+                onClick={() => setFilterStatus(status)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-all ${
+                  filterStatus === status
+                    ? "bg-zinc-900 text-white shadow-sm"
+                    : "text-zinc-500 hover:text-zinc-700"
+                }`}
+              >
+                {status}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -631,26 +681,41 @@ export default function AdminTransactions() {
       {filtered.length === 0 ? (
         <EmptyState filtered={isFiltered} />
       ) : (
-        <div className="space-y-4">
-          {Object.entries(grouped).map(([day, txs]) => (
-            <div key={day}>
-              <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                {day}
-              </p>
-              <div className="overflow-hidden rounded-2xl border border-zinc-100 bg-white shadow-sm">
-                {txs.map((tx, index) => (
-                  <TxRow
-                    key={tx.id}
-                    tx={tx}
-                    index={index}
-                    approving={approvingId === tx.id}
-                    onApprove={approvePayment}
-                  />
-                ))}
+        <>
+          <div className="space-y-4">
+            {Object.entries(grouped).map(([day, txs]) => (
+              <div key={day}>
+                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                  {day}
+                </p>
+                <div className="overflow-hidden rounded-2xl border border-zinc-100 bg-white shadow-sm">
+                  {txs.map((tx, index) => (
+                    <TxRow
+                      key={tx.id}
+                      tx={tx}
+                      index={index}
+                      approving={approvingId === tx.id}
+                      onApprove={approvePayment}
+                    />
+                  ))}
+                </div>
               </div>
+            ))}
+          </div>
+
+          {/* Pagination Component */}
+          {totalPages > 1 && (
+            <div className="mt-8">
+              <Pagination
+                page={currentPage}
+                totalPages={totalPages}
+                totalItems={totalItems}
+                pageSize={PAGE_SIZE}
+                onPageChange={handlePageChange}
+              />
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
     </div>
   );

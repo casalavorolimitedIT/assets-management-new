@@ -37,7 +37,6 @@ export function useNotifications(userId: string, isAdmin = false) {
           .limit(10);
 
     if (!error && data) setNotifications(data);
-    console.log(data)
     setLoading(false);
   }, [userId, isAdmin, supabase]);
 

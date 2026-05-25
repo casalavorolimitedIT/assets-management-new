@@ -3,11 +3,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
+  ArrowDownToLine,
+  ArrowUpFromLine,
   ArrowUpRight,
   Calendar,
   CheckCircle2,
   Clock,
   Crown,
+  Download,
+  FileText,
   Filter,
   Loader2,
   RefreshCw,
@@ -20,9 +24,14 @@ import {
 } from "lucide-react";
 import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
-import type { UserProfile } from "@/types";
+import type { Compliance, InvestmentPlan, UserProfile } from "@/types";
 import type { Transaction, TxStatus } from "./UserTransactions";
 import { Pagination } from "../Pagination";
+import {
+  generateStatement,
+  generateReceipt,
+  type TxForPdf,
+} from "@/lib/pdf/transactions";
 
 interface AdminTransaction extends Transaction {
   user?: UserProfile;
@@ -127,6 +136,27 @@ function isMetamapVerified(status?: string | null) {
   );
 }
 
+function parseCompliance(compliance: unknown): Partial<Compliance> | null {
+  if (!compliance) return null;
+  if (typeof compliance !== "string") return compliance as Partial<Compliance>;
+
+  try {
+    return JSON.parse(compliance) as Partial<Compliance>;
+  } catch {
+    return null;
+  }
+}
+
+function getInvestmentPlans(compliance: unknown): InvestmentPlan[] {
+  const parsed = parseCompliance(compliance);
+  if (Array.isArray(parsed?.investment_plans)) return parsed.investment_plans;
+  return parsed?.investment_plan ? [parsed.investment_plan] : [];
+}
+
+function getMonthlyPlanAmount(plan: InvestmentPlan) {
+  return Number(plan.monthly_amount_figures ?? 0) || 0;
+}
+
 function StatusBadge({ status }: { status: TxStatus }) {
   const meta = STATUS_META[status] ?? STATUS_META.pending;
   return (
@@ -138,6 +168,21 @@ function StatusBadge({ status }: { status: TxStatus }) {
     </span>
   );
 }
+
+const TX_TYPE_META: Partial<
+  Record<string, { icon: React.ElementType; gradient: string; label: string }>
+> = {
+  payout: {
+    icon: ArrowDownToLine,
+    gradient: "from-emerald-400 to-emerald-600",
+    label: "Payout",
+  },
+  debit: {
+    icon: ArrowUpFromLine,
+    gradient: "from-red-400 to-rose-600",
+    label: "Debit",
+  },
+};
 
 function TxRow({
   tx,
@@ -151,8 +196,12 @@ function TxRow({
   onApprove: (tx: AdminTransaction) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const typeMeta = TX_TYPE_META[tx.type];
   const plan = PLAN_META[tx.plan] ?? PLAN_META.premium;
-  const Icon = plan.icon;
+  const Icon = typeMeta?.icon ?? plan.icon;
+  const rowGradient = typeMeta?.gradient ?? plan.gradient;
+  const typeLabel =
+    typeMeta?.label ?? tx.type.charAt(0).toUpperCase() + tx.type.slice(1);
 
   return (
     <div
@@ -165,7 +214,7 @@ function TxRow({
       >
         <div className="flex min-w-0 items-center gap-4">
           <div
-            className={`flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br ${plan.gradient}`}
+            className={`flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br ${rowGradient}`}
           >
             <Icon className="size-4 text-white" />
           </div>
@@ -203,7 +252,16 @@ function TxRow({
         </div>
 
         <div className="flex items-center justify-between gap-3 lg:flex-col lg:items-end">
-          <p className="text-sm font-black tabular-nums text-zinc-900">
+          <p
+            className={`text-sm font-black tabular-nums ${
+              tx.type === "debit"
+                ? "text-red-600"
+                : tx.type === "payout"
+                  ? "text-emerald-600"
+                  : "text-zinc-900"
+            }`}
+          >
+            {tx.type === "debit" ? "−" : tx.type === "payout" ? "+" : ""}
             {fmt(tx.amount)}
           </p>
           <StatusBadge status={tx.status} />
@@ -220,10 +278,7 @@ function TxRow({
               },
               { label: "Investor", value: getUserName(tx.user) },
               { label: "Plan", value: plan.label },
-              {
-                label: "Type",
-                value: tx.type.charAt(0).toUpperCase() + tx.type.slice(1),
-              },
+              { label: "Type", value: typeLabel },
               tx.mode_of_payment && {
                 label: "Payment Mode",
                 value: tx.mode_of_payment,
@@ -252,22 +307,37 @@ function TxRow({
                 </div>
               ))}
           </div>
-          {tx.status === "pending" && (
-            <div className="mt-4 flex justify-end border-t border-zinc-200 pt-4">
+          <div className="mt-4 flex items-center justify-between border-t border-zinc-200 pt-4">
               <button
-                onClick={() => onApprove(tx)}
-                disabled={approving}
-                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const txForPdf: TxForPdf = {
+                    ...tx,
+                    investorName: getUserName(tx.user),
+                    investorEmail: tx.user?.email,
+                  };
+                  generateReceipt(txForPdf, getUserName(tx.user));
+                }}
+                className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:border-zinc-300"
               >
-                {approving ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="size-3.5" />
-                )}
-                Approve Payment
+                <FileText className="size-3.5 text-[#ff6900]" />
+                Download Receipt
               </button>
+              {tx.status === "pending" && (
+                <button
+                  onClick={() => onApprove(tx)}
+                  disabled={approving}
+                  className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {approving ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="size-3.5" />
+                  )}
+                  Approve Payment
+                </button>
+              )}
             </div>
-          )}
         </div>
       )}
     </div>
@@ -306,8 +376,6 @@ export default function AdminTransactions() {
   const [filterVerification, setFilterVerification] = useState<
     "all" | "verified" | "pending"
   >("all");
-
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
 
   const fetchTransactions = useCallback(async () => {
@@ -352,7 +420,6 @@ export default function AdminTransactions() {
     void fetchTransactions();
   }, [fetchTransactions]);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [search, filterStatus, filterPlan, filterVerification]);
@@ -392,7 +459,6 @@ export default function AdminTransactions() {
     });
   }, [filterPlan, filterStatus, filterVerification, search, transactions]);
 
-  // Pagination calculations
   const totalItems = filtered.length;
   const totalPages = Math.ceil(totalItems / PAGE_SIZE);
   const paginatedTransactions = useMemo(() => {
@@ -401,7 +467,6 @@ export default function AdminTransactions() {
     return filtered.slice(start, end);
   }, [filtered, currentPage]);
 
-  // Group paginated transactions by day
   const grouped = paginatedTransactions.reduce<
     Record<string, AdminTransaction[]>
   >((acc, tx) => {
@@ -415,14 +480,26 @@ export default function AdminTransactions() {
     return acc;
   }, {});
 
-  const totalInvested = filtered
-    .filter((tx) => tx.type === "investment")
-    .reduce((sum, tx) => sum + tx.amount, 0);
+  const filteredPlanKeys = new Set(
+    filtered.map((tx) => `${tx.user_id}:${tx.plan}`),
+  );
+  const filteredUsers = new Map(
+    filtered
+      .filter((tx) => tx.user)
+      .map((tx) => [tx.user_id, tx.user as UserProfile]),
+  );
+  const totalInvested = Array.from(filteredUsers.entries()).reduce(
+    (userSum, [userId, user]) =>
+      userSum +
+      getInvestmentPlans(user.compliance).reduce((planSum, plan) => {
+        if (!filteredPlanKeys.has(`${userId}:${plan.plan}`)) return planSum;
+        const amount = getMonthlyPlanAmount(plan);
+        return amount > 0 ? planSum + amount : planSum;
+      }, 0),
+    0,
+  );
   const pendingCount = filtered.filter((tx) => tx.status === "pending").length;
   const activeCount = filtered.filter((tx) => tx.status === "active").length;
-  const completedCount = filtered.filter(
-    (tx) => tx.status === "completed",
-  ).length;
 
   const isFiltered =
     search !== "" ||
@@ -543,15 +620,33 @@ export default function AdminTransactions() {
             Monitor investment activity across every investor account.
           </p>
         </div>
-        <button
-          onClick={handleRefresh}
-          className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50"
-        >
-          <RefreshCw
-            className={`size-3.5 ${refreshing ? "animate-spin" : ""}`}
-          />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {transactions.length > 0 && (
+            <button
+              onClick={() => {
+                const txsForPdf: TxForPdf[] = transactions.map((tx) => ({
+                  ...tx,
+                  investorName: getUserName(tx.user),
+                  investorEmail: tx.user?.email,
+                }));
+                generateStatement(txsForPdf, "All Investors", true);
+              }}
+              className="flex items-center gap-2 rounded-xl bg-[#ff6900] px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e55f00]"
+            >
+              <Download className="size-3.5" />
+              Download Statement
+            </button>
+          )}
+          <button
+            onClick={handleRefresh}
+            className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm transition-colors hover:bg-zinc-50"
+          >
+            <RefreshCw
+              className={`size-3.5 ${refreshing ? "animate-spin" : ""}`}
+            />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {actionError && (

@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   ChevronRight,
   Loader2,
+  CheckCircle2,
 } from "lucide-react";
 import BankDetailsDisplay from "../BankDetailsDisplay";
 
@@ -47,10 +48,11 @@ interface AddPlanModalProps {
 }
 
 export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(1); // 1 = select plan, 2 = fill details, 3 = confirm transfer
   const [selectedPlan, setSelectedPlan] = useState<ModalPlan>("premium");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingPlanData, setPendingPlanData] = useState<InvestmentPlan | null>(null);
 
   // Premium Plus fields
   const [ppAmountFigures, setPpAmountFigures] = useState("");
@@ -107,13 +109,22 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
     return null;
   };
 
-  const handleSubmit = async () => {
+  // Step 2 → Step 3: validate fields then show transfer confirmation
+  const handleProceedToConfirm = () => {
     setError(null);
     const planData = buildInvestmentPlan();
     if (!planData) {
       setError("Please fill in all required fields.");
       return;
     }
+    setPendingPlanData(planData);
+    setStep(3);
+  };
+
+  // Step 3 → Save: user confirms they have made the transfer
+  const handleConfirmTransfer = async () => {
+    setError(null);
+    if (!pendingPlanData) return;
 
     setLoading(true);
     try {
@@ -224,7 +235,7 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
         units: selectedPlan === "reif" ? Number(reifUnits) : undefined,
       });
 
-      onSuccess(planData);
+      onSuccess(pendingPlanData);
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save plan.");
@@ -252,17 +263,21 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
               </span>
             </div>
             <h2 className="text-xl font-bold text-zinc-900">
-              Configure Your Plan
+              {step === 3 ? "Complete Your Transfer" : "Configure Your Plan"}
             </h2>
             <p className="text-sm text-zinc-500 mt-1">
-              Step {step} of 2 —{" "}
-              {step === 1 ? "Select plan type" : "Fill in details"}
+              Step {step} of 3 —{" "}
+              {step === 1
+                ? "Select plan type"
+                : step === 2
+                  ? "Fill in details"
+                  : "Make your transfer"}
             </p>
           </div>
 
           {/* Progress */}
           <div className="flex gap-1 mb-6">
-            {[1, 2].map((s) => (
+            {[1, 2, 3].map((s) => (
               <div
                 key={s}
                 className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
@@ -449,7 +464,6 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
                   />
                 </div>
               )}
-              <BankDetailsDisplay />
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={() => {
@@ -461,7 +475,42 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
                   Back
                 </button>
                 <button
-                  onClick={handleSubmit}
+                  onClick={handleProceedToConfirm}
+                  className="flex-1 rounded-xl bg-[#ff6900] py-3 text-sm font-semibold text-white transition-all hover:bg-[#e55f00] active:scale-[0.98]"
+                >
+                  Activate Plan
+                  <ChevronRight className="inline size-4 ml-1" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 3: Transfer confirmation ── */}
+          {step === 3 && (
+            <div className="space-y-5">
+              {/* Instruction banner */}
+              <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <CheckCircle2 className="size-4 shrink-0 mt-0.5 text-amber-500" />
+                <p className="text-sm text-amber-800 leading-relaxed">
+                  Your plan details have been recorded. Please make a transfer
+                  to the account below, then confirm once done.
+                </p>
+              </div>
+
+              {/* Company bank details */}
+              <BankDetailsDisplay />
+
+              {/* Action buttons */}
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={onClose}
+                  disabled={loading}
+                  className="flex-1 rounded-xl border-2 border-zinc-200 py-3 text-sm font-semibold text-zinc-600 hover:border-zinc-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmTransfer}
                   disabled={loading}
                   className="flex-1 rounded-xl bg-[#ff6900] py-3 text-sm font-semibold text-white transition-all hover:bg-[#e55f00] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -471,7 +520,7 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
                       Saving…
                     </span>
                   ) : (
-                    "Activate Plan"
+                    "I have made the transfer"
                   )}
                 </button>
               </div>

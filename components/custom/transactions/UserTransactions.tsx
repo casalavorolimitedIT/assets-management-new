@@ -1,7 +1,9 @@
-"use client";
+"use client"
 
 import React, { useState, useEffect } from "react";
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
   ArrowUpRight,
   Clock,
   CheckCircle2,
@@ -17,12 +19,20 @@ import {
   Loader2,
   Calendar,
   RefreshCw,
+  Download,
+  FileText,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Pagination } from "../Pagination";
+import {
+  generateStatement,
+  generateReceipt,
+  type TxForPdf,
+} from "@/lib/pdf/transactions";
+import type { Compliance, InvestmentPlan } from "@/types";
 
 export type TxStatus = "pending" | "active" | "completed" | "failed";
-export type TxType = "investment" | "return" | "withdrawal";
+export type TxType = "investment" | "return" | "withdrawal" | "payout" | "debit";
 
 export interface Transaction {
   id: string;
@@ -60,6 +70,21 @@ const PLAN_META: Record<
     icon: Zap,
     color: "#10b981",
     gradient: "from-emerald-400 via-teal-500 to-cyan-600",
+  },
+};
+
+const TX_TYPE_META: Partial<
+  Record<string, { icon: React.ElementType; gradient: string; label: string }>
+> = {
+  payout: {
+    icon: ArrowDownToLine,
+    gradient: "from-emerald-400 to-emerald-600",
+    label: "Payout",
+  },
+  debit: {
+    icon: ArrowUpFromLine,
+    gradient: "from-red-400 to-rose-600",
+    label: "Debit",
   },
 };
 
@@ -113,9 +138,38 @@ const fmtTime = (s: string) =>
     minute: "2-digit",
   });
 
+function parseCompliance(compliance: unknown): Partial<Compliance> | null {
+  if (!compliance) return null;
+  if (typeof compliance !== "string") return compliance as Partial<Compliance>;
+
+  try {
+    return JSON.parse(compliance) as Partial<Compliance>;
+  } catch {
+    return null;
+  }
+}
+
+function getInvestmentPlans(compliance: unknown): InvestmentPlan[] {
+  const parsed = parseCompliance(compliance);
+  if (Array.isArray(parsed?.investment_plans)) return parsed.investment_plans;
+  return parsed?.investment_plan ? [parsed.investment_plan] : [];
+}
+
+function getMonthlyPlanAmount(plan: InvestmentPlan) {
+  return Number(plan.monthly_amount_figures ?? 0) || 0;
+}
+
+function sumMonthlyInvestments(plans: InvestmentPlan[], planFilter = "all") {
+  return plans
+    .filter((plan) => planFilter === "all" || plan.plan === planFilter)
+    .reduce((sum, plan) => {
+      const amount = getMonthlyPlanAmount(plan);
+      return amount > 0 ? sum + amount : sum;
+    }, 0);
+}
+
 function StatusBadge({ status }: { status: TxStatus }) {
   const m = STATUS_META[status];
-  const Icon = m.icon;
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider ${m.classes}`}
@@ -126,10 +180,21 @@ function StatusBadge({ status }: { status: TxStatus }) {
   );
 }
 
-function TxRow({ tx, index }: { tx: Transaction; index: number }) {
+function TxRow({ tx, index, ownerName }: { tx: Transaction; index: number; ownerName: string }) {
   const [expanded, setExpanded] = useState(false);
+
+  const typeMeta = TX_TYPE_META[tx.type];
   const plan = PLAN_META[tx.plan] ?? PLAN_META.premium;
-  const Icon = plan.icon;
+  const Icon = typeMeta?.icon ?? plan.icon;
+  const rowGradient = typeMeta?.gradient ?? plan.gradient;
+
+  const typeLabel = typeMeta?.label ?? (tx.type.charAt(0).toUpperCase() + tx.type.slice(1));
+
+  const handleReceipt = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const txForPdf: TxForPdf = { ...tx };
+    generateReceipt(txForPdf, ownerName);
+  };
 
   return (
     <div
@@ -140,9 +205,9 @@ function TxRow({ tx, index }: { tx: Transaction; index: number }) {
         onClick={() => setExpanded((e) => !e)}
         className="flex w-full items-center gap-4 px-5 py-4 text-left"
       >
-        {/* Icon */}
+        {/* Icon — type-aware */}
         <div
-          className={`flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br ${plan.gradient}`}
+          className={`flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br ${rowGradient}`}
         >
           <Icon className="size-4 text-white" />
         </div>
@@ -168,7 +233,12 @@ function TxRow({ tx, index }: { tx: Transaction; index: number }) {
 
         {/* Amount + status */}
         <div className="flex flex-col items-end gap-1.5 shrink-0">
-          <p className="text-sm font-black text-zinc-900 tabular-nums">
+          <p
+            className={`text-sm font-black tabular-nums ${
+              tx.type === "debit" ? "text-red-600" : tx.type === "payout" ? "text-emerald-600" : "text-zinc-900"
+            }`}
+          >
+            {tx.type === "debit" ? "−" : tx.type === "payout" ? "+" : ""}
             {fmt(tx.amount)}
           </p>
           <StatusBadge status={tx.status} />
@@ -185,10 +255,7 @@ function TxRow({ tx, index }: { tx: Transaction; index: number }) {
                 value: tx.id.slice(0, 8).toUpperCase(),
               },
               { label: "Plan", value: plan.label },
-              {
-                label: "Type",
-                value: tx.type.charAt(0).toUpperCase() + tx.type.slice(1),
-              },
+              { label: "Type", value: typeLabel },
               tx.mode_of_payment && {
                 label: "Payment Mode",
                 value: tx.mode_of_payment,
@@ -199,8 +266,10 @@ function TxRow({ tx, index }: { tx: Transaction; index: number }) {
                 value: tx.amount_words,
               },
             ]
-              .filter(Boolean)
-              .map((row: any) => (
+              .filter((row): row is { label: string; value: string } =>
+                Boolean(row),
+              )
+              .map((row) => (
                 <div key={row.label}>
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
                     {row.label}
@@ -210,6 +279,15 @@ function TxRow({ tx, index }: { tx: Transaction; index: number }) {
                   </p>
                 </div>
               ))}
+          </div>
+          <div className="mt-4 flex justify-end border-t border-zinc-200 pt-4">
+            <button
+              onClick={handleReceipt}
+              className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-xs font-semibold text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 hover:border-zinc-300"
+            >
+              <FileText className="size-3.5 text-[#ff6900]" />
+              Download Receipt
+            </button>
           </div>
         </div>
       )}
@@ -242,8 +320,9 @@ export default function UserTransactions() {
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState<TxStatus | "all">("all");
   const [filterPlan, setFilterPlan] = useState<string>("all");
+  const [ownerName, setOwnerName] = useState("Investor");
+  const [investmentPlans, setInvestmentPlans] = useState<InvestmentPlan[]>([]);
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
@@ -257,15 +336,31 @@ export default function UserTransactions() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false });
+      const [{ data: txData, error: txError }, { data: profile }] =
+        await Promise.all([
+          supabase
+            .from("transactions")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false }),
+          supabase
+            .from("profiles")
+            .select("first_name, last_name, title, compliance")
+            .eq("id", user.id)
+            .single(),
+        ]);
 
-      if (error) throw new Error(error.message);
-      setAllTransactions(data ?? []);
-      setCurrentPage(1); // Reset to first page when data changes
+      if (txError) throw new Error(txError.message);
+      setAllTransactions(txData ?? []);
+      setCurrentPage(1);
+
+      if (profile) {
+        const name = [profile.title, profile.first_name, profile.last_name]
+          .filter(Boolean)
+          .join(" ");
+        setOwnerName(name || user.email?.split("@")[0] || "Investor");
+        setInvestmentPlans(getInvestmentPlans(profile.compliance));
+      }
     } catch (err) {
       setFetchError(
         err instanceof Error ? err.message : "Failed to load transactions.",
@@ -279,7 +374,6 @@ export default function UserTransactions() {
     fetchTransactions();
   }, []);
 
-  // Apply filters
   const filteredTransactions = allTransactions.filter((tx) => {
     const matchSearch =
       !search ||
@@ -290,34 +384,21 @@ export default function UserTransactions() {
     return matchSearch && matchStatus && matchPlan;
   });
 
-  // Pagination calculations
   const totalFiltered = filteredTransactions.length;
   const totalPages = Math.ceil(totalFiltered / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const currentTransactions = filteredTransactions.slice(startIndex, endIndex);
+  const currentTransactions = filteredTransactions.slice(startIndex, startIndex + itemsPerPage);
 
-  // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
   }, [search, filterStatus, filterPlan]);
 
-  // Calculate summary stats from all transactions (not paginated)
-  const totalInvested = allTransactions
-    .filter((t) => t.type === "investment")
-    .reduce((s, t) => s + t.amount, 0);
+  const totalInvested = sumMonthlyInvestments(investmentPlans, filterPlan);
+  const pendingCount = allTransactions.filter((t) => t.status === "pending").length;
+  const activeCount = allTransactions.filter((t) => t.status === "active").length;
 
-  const pendingCount = allTransactions.filter(
-    (t) => t.status === "pending",
-  ).length;
-  const activeCount = allTransactions.filter(
-    (t) => t.status === "active",
-  ).length;
+  const isFiltered = search !== "" || filterStatus !== "all" || filterPlan !== "all";
 
-  const isFiltered =
-    search !== "" || filterStatus !== "all" || filterPlan !== "all";
-
-  // Group current page transactions by date
   const grouped = currentTransactions.reduce<Record<string, Transaction[]>>(
     (acc, tx) => {
       const day = new Date(tx.created_at).toLocaleDateString("en-NG", {
@@ -358,7 +439,6 @@ export default function UserTransactions() {
 
   return (
     <div className="min-h-screen bg-zinc-50/50 pb-10">
-      {/* ── Header ── */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Transactions</h1>
@@ -366,72 +446,47 @@ export default function UserTransactions() {
             All your investment activity in one place
           </p>
         </div>
-        <button
-          onClick={fetchTransactions}
-          className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm hover:bg-zinc-50 transition-colors"
-        >
-          <RefreshCw className="size-3.5" />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          {allTransactions.length > 0 && (
+            <button
+              onClick={() => generateStatement(allTransactions as TxForPdf[], ownerName, false)}
+              className="flex items-center gap-2 rounded-xl bg-[#ff6900] px-3 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#e55f00]"
+            >
+              <Download className="size-3.5" />
+              Download Statement
+            </button>
+          )}
+          <button
+            onClick={fetchTransactions}
+            className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-zinc-600 shadow-sm hover:bg-zinc-50 transition-colors"
+          >
+            <RefreshCw className="size-3.5" />
+            Refresh
+          </button>
+        </div>
       </div>
 
-      {/* ── Summary strip ── */}
       {allTransactions.length > 0 && (
         <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            {
-              label: "Total Invested",
-              value: fmt(totalInvested),
-              icon: <Wallet className="size-4" />,
-              color: "text-[#ff6900]",
-              bg: "bg-[#fff1e6]",
-            },
-            {
-              label: "Transactions",
-              value: allTransactions.length.toString(),
-              icon: <ArrowUpRight className="size-4" />,
-              color: "text-blue-600",
-              bg: "bg-blue-50",
-            },
-            {
-              label: "Pending",
-              value: pendingCount.toString(),
-              icon: <Clock className="size-4" />,
-              color: "text-amber-600",
-              bg: "bg-amber-50",
-            },
-            {
-              label: "Active",
-              value: activeCount.toString(),
-              icon: <TrendingUp className="size-4" />,
-              color: "text-emerald-600",
-              bg: "bg-emerald-50",
-            },
+            { label: "Total Invested", value: fmt(totalInvested), icon: <Wallet className="size-4" />, color: "text-[#ff6900]", bg: "bg-[#fff1e6]" },
+            { label: "Transactions", value: allTransactions.length.toString(), icon: <ArrowUpRight className="size-4" />, color: "text-blue-600", bg: "bg-blue-50" },
+            { label: "Pending", value: pendingCount.toString(), icon: <Clock className="size-4" />, color: "text-amber-600", bg: "bg-amber-50" },
+            { label: "Active", value: activeCount.toString(), icon: <TrendingUp className="size-4" />, color: "text-emerald-600", bg: "bg-emerald-50" },
           ].map((s) => (
-            <div
-              key={s.label}
-              className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm"
-            >
-              <div
-                className={`mb-2 flex size-7 items-center justify-center rounded-lg ${s.bg} ${s.color}`}
-              >
+            <div key={s.label} className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm">
+              <div className={`mb-2 flex size-7 items-center justify-center rounded-lg ${s.bg} ${s.color}`}>
                 {s.icon}
               </div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-                {s.label}
-              </p>
-              <p className={`mt-1 text-lg font-black tabular-nums ${s.color}`}>
-                {s.value}
-              </p>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{s.label}</p>
+              <p className={`mt-1 text-lg font-black tabular-nums ${s.color}`}>{s.value}</p>
             </div>
           ))}
         </div>
       )}
 
-      {/* ── Filters ── */}
       {allTransactions.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          {/* Search */}
           <div className="relative flex-1 min-w-48">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-zinc-400" />
             <input
@@ -441,38 +496,24 @@ export default function UserTransactions() {
               className="w-full rounded-xl border border-zinc-200 bg-white pl-9 pr-4 py-2 text-sm text-zinc-800 placeholder:text-zinc-400 focus:border-[#ff6900] focus:outline-none transition-colors shadow-sm"
             />
           </div>
-
-          {/* Status filter */}
           <div className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm">
             <Filter className="ml-2 size-3.5 text-zinc-400" />
-            {(["all", "pending", "active", "completed", "failed"] as const).map(
-              (s) => (
-                <button
-                  key={s}
-                  onClick={() => setFilterStatus(s)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-all ${
-                    filterStatus === s
-                      ? "bg-zinc-900 text-white shadow-sm"
-                      : "text-zinc-500 hover:text-zinc-700"
-                  }`}
-                >
-                  {s}
-                </button>
-              ),
-            )}
+            {(["all", "pending", "active"] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-all ${filterStatus === s ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
+              >
+                {s}
+              </button>
+            ))}
           </div>
-
-          {/* Plan filter */}
           <div className="flex items-center gap-1 rounded-xl border border-zinc-200 bg-white p-1 shadow-sm">
             {(["all", "premium_plus", "premium", "reif"] as const).map((p) => (
               <button
                 key={p}
                 onClick={() => setFilterPlan(p)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
-                  filterPlan === p
-                    ? "bg-zinc-900 text-white shadow-sm"
-                    : "text-zinc-500 hover:text-zinc-700"
-                }`}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${filterPlan === p ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-500 hover:text-zinc-700"}`}
               >
                 {p === "all" ? "All Plans" : PLAN_META[p].label}
               </button>
@@ -481,7 +522,6 @@ export default function UserTransactions() {
         </div>
       )}
 
-      {/* ── Transaction list ── */}
       {filteredTransactions.length === 0 ? (
         <EmptyState filtered={isFiltered} />
       ) : (
@@ -489,19 +529,15 @@ export default function UserTransactions() {
           <div className="space-y-4">
             {Object.entries(grouped).map(([day, txs]) => (
               <div key={day}>
-                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                  {day}
-                </p>
+                <p className="mb-2 px-1 text-[10px] font-bold uppercase tracking-widest text-zinc-400">{day}</p>
                 <div className="overflow-hidden rounded-2xl border border-zinc-100 bg-white shadow-sm">
                   {txs.map((tx, i) => (
-                    <TxRow key={tx.id} tx={tx} index={i} />
+                    <TxRow key={tx.id} tx={tx} index={i} ownerName={ownerName} />
                   ))}
                 </div>
               </div>
             ))}
           </div>
-
-          {/* ── Pagination ── */}
           <div className="mt-6">
             <Pagination
               page={currentPage}

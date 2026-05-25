@@ -1,5 +1,5 @@
 import { Tab } from "@/app/dashboard/broadcast/page";
-import { Bell, Mail } from "lucide-react";
+import { Banknote, Bell, Mail } from "lucide-react";
 
 export function TabSwitcher({
   active,
@@ -14,8 +14,9 @@ export function TabSwitcher({
       aria-label="Broadcast channel"
       className="inline-flex rounded-xl border border-slate-200 bg-slate-100 p-1 gap-1"
     >
-      {(["email", "notification"] as Tab[]).map((tab) => {
-        const Icon = tab === "email" ? Mail : Bell;
+      {(["email", "notification", "transaction"] as Tab[]).map((tab) => {
+        const Icon =
+          tab === "email" ? Mail : tab === "notification" ? Bell : Banknote;
         const isActive = active === tab;
         return (
           <button
@@ -28,7 +29,11 @@ export function TabSwitcher({
               ${isActive ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
           >
             <Icon className="w-4 h-4" aria-hidden="true" />
-            {tab === "email" ? "Email" : "Notification"}
+            {tab === "email"
+              ? "Email"
+              : tab === "notification"
+                ? "Notification"
+                : "Transaction"}
           </button>
         );
       })}

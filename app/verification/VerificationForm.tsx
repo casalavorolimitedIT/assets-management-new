@@ -17,6 +17,8 @@ import {
   AlertCircle,
   ScanFace,
   PartyPopper,
+  Banknote,
+  CheckCircle2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -147,6 +149,7 @@ const STEPS = [
   { id: 2, label: "Bio Data", icon: FileText },
   { id: 3, label: "Investment Plan", icon: TrendingUp },
   { id: 4, label: "Bank Details", icon: Landmark },
+  { id: 5, label: "Make Transfer", icon: Banknote },
 ];
 
 const MEANS_OF_ID = [
@@ -877,7 +880,8 @@ export default function VerificationForm({
     try {
       await step4Schema.validate(formik.values, { abortEarly: false });
       await formik.setErrors({});
-      formik.handleSubmit();
+      setAttempted(false);
+      setStep(5);
     } catch (err) {
       if (err instanceof Yup.ValidationError) {
         const errors = err.inner.reduce<Record<string, string>>((acc, e) => {
@@ -887,6 +891,10 @@ export default function VerificationForm({
         await formik.setErrors(errors);
       }
     }
+  };
+
+  const handleConfirmTransfer = () => {
+    formik.handleSubmit();
   };
 
   const err = formik.errors;
@@ -915,7 +923,7 @@ export default function VerificationForm({
               Account Verification
             </h1>
             <p className="text-xs text-muted-foreground">
-              Complete all four steps to verify your account
+              Complete all five steps to verify your account
             </p>
           </div>
         </div>
@@ -979,7 +987,7 @@ export default function VerificationForm({
           </nav>
           <div className="lg:hidden mt-3 text-center">
             <p className="text-xs text-muted-foreground uppercase tracking-widest">
-              Step {step} of 4
+              Step {step} of 5
             </p>
             <p className="text-sm font-semibold">{STEPS[step - 1].label}</p>
           </div>
@@ -1008,6 +1016,7 @@ export default function VerificationForm({
               {step === 4 && (
                 <StepFour formik={formik} fieldError={fieldError} />
               )}
+              {step === 5 && <StepFive />}
             </div>
 
             {/* Server error */}
@@ -1049,12 +1058,22 @@ export default function VerificationForm({
                 >
                   Next <ChevronRight className="size-4" />
                 </Button>
-              ) : (
+              ) : step === 4 ? (
                 <Button
                   type="button"
                   size="sm"
                   disabled={formik.isSubmitting}
                   onClick={handleFinalSubmit}
+                  className="gap-1.5"
+                >
+                  Next <ChevronRight className="size-4" />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={formik.isSubmitting}
+                  onClick={handleConfirmTransfer}
                   className="gap-1.5"
                 >
                   {formik.isSubmitting ? (
@@ -1063,7 +1082,7 @@ export default function VerificationForm({
                     </>
                   ) : (
                     <>
-                      <Check className="size-4" /> Submit
+                      <Check className="size-4" /> I have made the transfer
                     </>
                   )}
                 </Button>
@@ -1720,8 +1739,6 @@ function StepThree({ formik, fieldError }: StepProps) {
           </div>
         </div>
       )}
-
-      <BankDetailsDisplay />
     </div>
   );
 }
@@ -1769,14 +1786,41 @@ function StepFour({ formik, fieldError }: StepProps) {
       <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex gap-3">
         <ShieldCheck className="size-5 text-primary shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <p className="text-sm font-medium text-foreground">Ready to submit</p>
+          <p className="text-sm font-medium text-foreground">Almost there</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            By submitting this form you confirm that all information provided is
-            accurate and complete. You will then be asked to verify your
-            identity using MetaMap before your account is activated.
+            After confirming your bank details, you will be shown the company
+            account to transfer your investment to before final submission.
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Step 5: Transfer Confirmation ───────────────────────────────────────────
+
+function StepFive() {
+  return (
+    <div className="space-y-6">
+      <StepHeader
+        step={5}
+        title="Make Your Transfer"
+        description="Transfer your investment amount to the account below, then confirm."
+      />
+
+      {/* Instruction banner */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+        <CheckCircle2 className="size-4 shrink-0 mt-0.5 text-amber-500" />
+        <p className="text-sm text-amber-800 leading-relaxed">
+          Your details have been recorded. Please make a transfer to the
+          Casalavoro account below, then click{" "}
+          <span className="font-semibold">"I have made the transfer"</span> to
+          complete your verification.
+        </p>
+      </div>
+
+      {/* Company bank details */}
+      <BankDetailsDisplay />
     </div>
   );
 }
@@ -1795,7 +1839,7 @@ function StepHeader({
   return (
     <div className="space-y-1 pb-2">
       <p className="text-[0.68rem] font-medium uppercase tracking-widest text-primary">
-        Step {step} of 4
+        Step {step} of 5
       </p>
       <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
       <p className="text-sm text-muted-foreground">{description}</p>

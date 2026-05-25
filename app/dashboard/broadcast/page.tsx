@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { X, CheckCircle2, AlertCircle, Info, Users, Link } from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { X, CheckCircle2, AlertCircle, Info } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { TabSwitcher } from "@/components/custom/broadcast/Broadcast";
 import { FilterBar } from "@/components/custom/broadcast/FilterBar";
@@ -9,11 +9,12 @@ import { UserTable } from "@/components/custom/broadcast/UserTable";
 import {
   EmailForm,
   NotificationForm,
+  TransactionForm,
 } from "@/components/custom/broadcast/Forms";
 import { SelectionBanner } from "@/components/custom/broadcast/SelectionBanner";
 import { Pagination } from "@/components/custom/Pagination";
 
-export type Tab = "email" | "notification";
+export type Tab = "email" | "notification" | "transaction";
 export type NotifType = "info" | "success" | "warning" | "error";
 
 export interface User {
@@ -108,7 +109,6 @@ const BroadcastPage = () => {
   const [filters, setFilters] = useState<Filter>(DEFAULT_FILTERS);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Fetch users
   useEffect(() => {
     (async () => {
       setLoadingUsers(true);
@@ -132,7 +132,6 @@ const BroadcastPage = () => {
     })();
   }, []);
 
-  // Apply filters
   useEffect(() => {
     let result = [...users];
     if (filters.search) {
@@ -223,9 +222,7 @@ const BroadcastPage = () => {
           `${process.env.NEXT_PUBLIC_SMTP_URL}/send-bulk-email`,
           {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ subject, body, recipients }),
           },
         );
@@ -243,7 +240,6 @@ const BroadcastPage = () => {
         });
         handleClear();
       } catch (err) {
-        console.log("error", err instanceof Error ? err.message : err);
         setToast({ message: "Failed to send email", type: "error" });
       } finally {
         setSending(false);
@@ -280,6 +276,13 @@ const BroadcastPage = () => {
     [selectedUsers],
   );
 
+  const composeHeading =
+    tab === "email"
+      ? "Compose Email"
+      : tab === "notification"
+        ? "Compose Notification"
+        : "Record Transaction";
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <div className="space-y-6">
@@ -293,7 +296,8 @@ const BroadcastPage = () => {
               Broadcast
             </h1>
             <p className="text-slate-500 text-sm mt-0.5">
-              Send emails or in-app notifications to selected users.
+              Send emails, in-app notifications, or record transactions for
+              selected users.
             </p>
           </div>
           <TabSwitcher
@@ -349,7 +353,6 @@ const BroadcastPage = () => {
               loading={loadingUsers}
             />
 
-            {/* Pagination Component */}
             {totalPages > 1 && (
               <div className="mt-4">
                 <Pagination
@@ -372,7 +375,7 @@ const BroadcastPage = () => {
               id="compose-heading"
               className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3"
             >
-              {tab === "email" ? "Compose Email" : "Compose Notification"}
+              {composeHeading}
             </h2>
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
@@ -396,11 +399,22 @@ const BroadcastPage = () => {
                   onSend={handleSendEmail}
                   sending={sending}
                 />
-              ) : (
+              ) : tab === "notification" ? (
                 <NotificationForm
                   selectedUsers={selectedUsers}
                   onSend={handleSendNotification}
                   sending={sending}
+                />
+              ) : (
+                // Transaction tab — TransactionForm manages its own sending state
+                // and calls onSuccess/onError to surface toasts in the parent.
+                <TransactionForm
+                  selectedUsers={selectedUsers}
+                  onSuccess={(msg) => {
+                    setToast({ message: msg, type: "success" });
+                    handleClear();
+                  }}
+                  onError={(msg) => setToast({ message: msg, type: "error" })}
                 />
               )}
             </div>

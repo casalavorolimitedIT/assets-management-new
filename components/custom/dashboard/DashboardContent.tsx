@@ -34,6 +34,18 @@ interface PortfolioItem {
   changeType: "up" | "down";
 }
 
+type DashboardInvestment = {
+  plan?: string | null;
+  tenor?: string | null;
+  monthly_payment_date?: string | null;
+  monthly_amount_figures?: number | null;
+  amount_figures?: number | null;
+  total_figures?: number | null;
+  monthly_amount_words?: string | null;
+  amount_words?: string | null;
+  total_words?: string | null;
+};
+
 const PLAN_LABELS: Record<string, string> = {
   premium: "Premium",
   premium_plus: "Premium Plus",
@@ -50,7 +62,39 @@ const PLAN_RATES: Record<string, string> = {
   reif: "12% p.a.",
 };
 
-function deriveStats(inv: any): StatCard[] {
+function parseTenorToMonths(tenor?: string | null) {
+  if (!tenor) return 0;
+
+  const match = tenor.match(/(\d+)\s*(?:Month|month)/);
+  if (match) return parseInt(match[1], 10);
+
+  const months = parseInt(tenor, 10);
+  return Number.isNaN(months) ? 0 : months;
+}
+
+function addMonthsClamped(date: Date, months: number) {
+  const next = new Date(date);
+  const targetDay = next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + months);
+  const lastDay = new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate();
+  next.setDate(Math.min(targetDay, lastDay));
+  return next;
+}
+
+function getNextPaymentDate(inv?: DashboardInvestment | null) {
+  if (!inv?.monthly_payment_date) return null;
+
+  const startDate = new Date(inv.monthly_payment_date);
+  if (Number.isNaN(startDate.getTime())) return null;
+
+  const tenorMonths = parseTenorToMonths(inv?.tenor);
+  if (!tenorMonths) return null;
+
+  return addMonthsClamped(startDate, tenorMonths);
+}
+
+function deriveStats(inv: DashboardInvestment | null | undefined): StatCard[] {
   const planKey: string = inv?.plan ?? "";
   const planLabel = PLAN_LABELS[planKey] ?? "—";
   const planRate = PLAN_RATES[planKey] ?? "—";
@@ -67,8 +111,9 @@ function deriveStats(inv: any): StatCard[] {
         ? `₦${totalFigures.toLocaleString("en-NG")}`
         : "—";
 
-  const nextPayment = inv?.monthly_payment_date
-    ? new Date(inv.monthly_payment_date).toLocaleDateString("en-NG", {
+  const nextPaymentDate = getNextPaymentDate(inv);
+  const nextPayment = nextPaymentDate
+    ? nextPaymentDate.toLocaleDateString("en-NG", {
         day: "numeric",
         month: "short",
         year: "numeric",
@@ -115,7 +160,7 @@ function deriveStats(inv: any): StatCard[] {
   ];
 }
 
-function derivePortfolio(plans: any[]): PortfolioItem[] {
+function derivePortfolio(plans: DashboardInvestment[]): PortfolioItem[] {
   if (!plans.length) return [];
   const total = plans.reduce((sum, inv) => {
     return (
@@ -209,14 +254,17 @@ export function DashboardContent({
 }: {
   firstName: string;
   isVerified: boolean;
-  profile: any;
-  compliance: any;
+  profile?: { metamap_status?: string | null } | null;
+  compliance?: {
+    investment_plan?: DashboardInvestment | null;
+    investment_plans?: DashboardInvestment[] | null;
+  } | null;
 }) {
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
-    const allPlans: any[] = compliance?.investment_plans?.length
+  const allPlans: DashboardInvestment[] = compliance?.investment_plans?.length
     ? compliance.investment_plans
     : compliance?.investment_plan
       ? [compliance.investment_plan]
@@ -241,7 +289,7 @@ export function DashboardContent({
             {firstName} 👋
           </h1>
           <p className="mt-1 text-sm text-zinc-500">
-            Here's what's happening with your investments today.
+            Here&apos;s what&apos;s happening with your investments today.
           </p>
           {!isVerified && (
             <div className="mt-4 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
@@ -356,7 +404,7 @@ export function DashboardContent({
       {/* ── Stat cards ── */}
       {stats.length > 0 ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {stats.map((card: any) => (
+          {stats.map((card) => (
             <StatCardItem key={card.label} card={card} />
           ))}
         </div>

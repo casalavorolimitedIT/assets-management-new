@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Users,
   Megaphone,
+  BanknoteArrowDown,
 } from "lucide-react";
 import { logout } from "@/app/(auth)/actions/auth-actions";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -43,6 +44,7 @@ const SECONDARY_NAV = [
 const ADMIN_NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Investors", href: "/dashboard/investments", icon: Users },
+  { label: "Payout Schedule", href: "/dashboard/payout", icon: BanknoteArrowDown },
   { label: "Portfolios", href: "/dashboard/portfolio", icon: Wallet },
   {
     label: "Transactions",

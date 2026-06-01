@@ -9,13 +9,25 @@ const PUBLIC_ROUTES = [
   "/terms",
 ];
 
+const ADMIN_ROUTES = ["/dashboard/payout", "/dashboard/broadcast"];
+
 const ALLOWED_ORIGINS = [
   process.env.NEXT_PUBLIC_APP_URL!,
   "http://localhost:3000",
 ];
 
+function isAdminRoute(pathname: string) {
+  return ADMIN_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  );
+}
+
+function isAdminRole(role: unknown) {
+  return typeof role === "string" && role.trim().toUpperCase() === "ADMIN";
+}
+
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
+  const response = NextResponse.next({
     request: { headers: request.headers },
   });
 
@@ -79,6 +91,18 @@ export async function middleware(request: NextRequest) {
 
   if (user && request.nextUrl.pathname === "/login") {
     return NextResponse.redirect(new URL("/dashboard", request.url));
+  }
+
+  if (user && isAdminRoute(request.nextUrl.pathname)) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    if (!isAdminRole(profile?.role)) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
   }
 
   return response;

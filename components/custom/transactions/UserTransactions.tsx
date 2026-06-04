@@ -439,7 +439,7 @@ export default function UserTransactions() {
 
   return (
     <div className="min-h-screen bg-zinc-50/50 pb-10">
-      <div className="mb-6 flex items-start justify-between gap-4">
+      <div className="mb-6 flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-zinc-900">Transactions</h1>
           <p className="mt-0.5 text-sm text-zinc-500">
@@ -467,7 +467,7 @@ export default function UserTransactions() {
       </div>
 
       {allTransactions.length > 0 && (
-        <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mb-6 grid lg:grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { label: "Total Invested", value: fmt(totalInvested), icon: <Wallet className="size-4" />, color: "text-[#ff6900]", bg: "bg-[#fff1e6]" },
             { label: "Transactions", value: allTransactions.length.toString(), icon: <ArrowUpRight className="size-4" />, color: "text-blue-600", bg: "bg-blue-50" },

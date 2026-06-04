@@ -596,7 +596,7 @@ const AdminDashboard = () => {
       </div>
 
       {/* Birthdays + Payouts — use allUsers so they're never paginated */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="grid lg:grid-cols-2 gap-3 mb-6">
         <UpcomingBirthdays users={allUsers} />
         <UpcomingPayouts users={allUsers} />
       </div>

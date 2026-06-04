@@ -663,7 +663,7 @@ export default function AdminTransactions() {
         </div>
       )}
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mb-6 grid lg:grid-cols-2 gap-3">
         {[
           {
             label: "Total Invested",
@@ -743,12 +743,12 @@ export default function AdminTransactions() {
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-2 overflow-x-auto pb-1">
           {(["all", "premium_plus", "premium", "reif"] as const).map((plan) => (
             <button
               key={plan}
               onClick={() => setFilterPlan(plan)}
-              className={`shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all ${
+              className={`whitespace-nowrap shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all ${
                 filterPlan === plan
                   ? "bg-[#ff6900] text-white"
                   : "border border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"
@@ -761,7 +761,7 @@ export default function AdminTransactions() {
             <button
               key={verification}
               onClick={() => setFilterVerification(verification)}
-              className={`shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-semibold capitalize transition-all ${
+              className={`whitespace-nowrap shrink-0 rounded-xl px-3.5 py-1.5 text-xs font-semibold capitalize transition-all ${
                 filterVerification === verification
                   ? "bg-zinc-900 text-white"
                   : "border border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300"

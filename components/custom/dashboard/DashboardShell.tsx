@@ -99,7 +99,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden z-50 bg-zinc-50">
+    <div className="flex h-screen overflow-hidden bg-zinc-50">
       {/* Mobile overlay */}
       {isMobile && sidebarOpen && (
         <div
@@ -110,7 +110,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 flex flex-col border-r border-zinc-200 bg-white shadow-sm transition-all duration-300 ${
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col border-r border-zinc-200 bg-white shadow-sm transition-all duration-300 ${
           isMobile
             ? sidebarOpen
               ? "translate-x-0 w-64"
@@ -268,7 +268,7 @@ export function DashboardShell({ user, children }: DashboardShellProps) {
         }`}
       >
         {/* Top bar */}
-        <header className="flex h-16 items-center justify-between border-b border-zinc-200 bg-white/80 backdrop-blur-sm px-4 md:px-6">
+        <header className="flex z-50 h-16 items-center justify-between border-b border-zinc-200 bg-white/80 backdrop-blur-sm px-4 md:px-6">
           <button
             onClick={() => setSidebarOpen(true)}
             className="rounded-lg p-2 text-zinc-600 hover:bg-zinc-100 transition-colors md:hidden"

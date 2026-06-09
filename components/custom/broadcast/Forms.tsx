@@ -306,6 +306,7 @@ function DebitForm({
   const [amount, setAmount] = useState("");
   const [amountWords, setAmountWords] = useState("");
   const [sending, setSending] = useState(false);
+  const [showConfirmDebit, setShowConfirmDebit] = useState(false);
 
   const user = selectedUsers[0];
   const amountNum = parseFloat(amount.replace(/,/g, "")) || 0;
@@ -379,9 +380,7 @@ function DebitForm({
       if (fetchErr)
         throw new Error(`Profile fetch failed: ${fetchErr.message}`);
 
-      const compliance = structuredClone(
-        profile?.compliance ?? {},
-      ) as any;
+      const compliance = structuredClone(profile?.compliance ?? {}) as any;
 
       if (Array.isArray(compliance.investment_plans)) {
         compliance.investment_plans = compliance.investment_plans
@@ -510,6 +509,11 @@ function DebitForm({
     } finally {
       setSending(false);
     }
+  };
+
+  const handleConfirmDebit = async () => {
+    setShowConfirmDebit(false);
+    await handleSend();
   };
 
   return (
@@ -690,7 +694,8 @@ function DebitForm({
       )}
 
       <button
-        onClick={handleSend}
+        type="button"
+        onClick={() => setShowConfirmDebit(true)}
         disabled={!isValid || sending}
         className="flex items-center justify-center gap-2 w-full px-4 py-2.5 text-white
           bg-red-700 hover:bg-red-800 rounded-lg text-sm font-semibold
@@ -704,6 +709,44 @@ function DebitForm({
         )}
         {sending ? "Processing…" : "Apply Debit"}
       </button>
+
+      {showConfirmDebit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/10 backdrop-blur-sm px-4 py-6">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl ring-1 ring-slate-200">
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-red-50 p-3 text-red-700">
+                <AlertTriangle className="w-5 h-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-slate-900">
+                  Confirm Debit
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  This action will debit the selected plan and may empty it
+                  completely. The change cannot be reversed once applied.
+                </p>
+              </div>
+            </div>
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowConfirmDebit(false)}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDebit}
+                disabled={sending}
+                className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Confirm Debit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

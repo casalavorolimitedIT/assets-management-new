@@ -256,7 +256,14 @@ const step3Schema = Yup.object({
     .required("Select an investment plan"),
   ppAmountFigures: Yup.string().when("investmentPlan", {
     is: "premium_plus",
-    then: (s) => s.required("Amount (figures) is required"),
+    then: (s) =>
+      s
+        .required("Amount (figures) is required")
+        .test(
+          "min-amount",
+          "Premium Plus minimum amount is ₦100,000",
+          (value) => !value || Number(value) >= 100000,
+        ),
   }),
   ppAmountWords: Yup.string().when("investmentPlan", {
     is: "premium_plus",
@@ -276,7 +283,14 @@ const step3Schema = Yup.object({
   }),
   prMonthlyAmountFigures: Yup.string().when("investmentPlan", {
     is: "premium",
-    then: (s) => s.required("Monthly amount (figures) is required"),
+    then: (s) =>
+      s
+        .required("Monthly amount (figures) is required")
+        .test(
+          "min-amount",
+          "Premium minimum amount is ₦100,000",
+          (value) => !value || Number(value) >= 100000,
+        ),
   }),
   prMonthlyAmountWords: Yup.string().when("investmentPlan", {
     is: "premium",
@@ -300,7 +314,14 @@ const step3Schema = Yup.object({
   }),
   reifTotalFigures: Yup.string().when("investmentPlan", {
     is: "reif",
-    then: (s) => s.required("Total investment (figures) is required"),
+    then: (s) =>
+      s
+        .required("Total investment (figures) is required")
+        .test(
+          "min-amount",
+          "REIF minimum amount is ₦500,000",
+          (value) => !value || Number(value) >= 500000,
+        ),
   }),
   reifTotalWords: Yup.string().when("investmentPlan", {
     is: "reif",

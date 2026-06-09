@@ -117,6 +117,21 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
       setError("Please fill in all required fields.");
       return;
     }
+
+    const amount = planData.monthly_amount_figures;
+    if (selectedPlan === "premium_plus" && amount < 100000) {
+      setError("Premium Plus minimum amount is ₦100,000.");
+      return;
+    }
+    if (selectedPlan === "premium" && amount < 100000) {
+      setError("Premium minimum amount is ₦100,000.");
+      return;
+    }
+    if (selectedPlan === "reif" && amount < 500000) {
+      setError("REIF minimum amount is ₦500,000.");
+      return;
+    }
+
     setPendingPlanData(planData);
     setStep(3);
   };

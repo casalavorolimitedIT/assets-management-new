@@ -179,9 +179,9 @@ function getUpcomingPayouts(
 
       const planKey = plan.plan?.toLowerCase();
       const PLAN_RATES: Record<string, number> = {
-        premium_plus: 0.17,
-        premium: 0.15,
-        reif: 0.12,
+        premium_plus: 0.12,
+        premium: 0.2,
+        reif: 0.22,
       };
       const annualRate = PLAN_RATES[planKey] ?? 0.15;
 

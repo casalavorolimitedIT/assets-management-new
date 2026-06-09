@@ -49,9 +49,9 @@ const MONTH_FORMATTER = new Intl.DateTimeFormat("en-NG", {
   year: "numeric",
 });
 const PLAN_RATES: Record<string, number> = {
-  premium_plus: 0.17,
-  premium: 0.15,
-  reif: 0.12,
+  premium_plus: 0.12,
+  premium: 0.2,
+  reif: 0.22,
 };
 
 function formatCurrency(value: number) {

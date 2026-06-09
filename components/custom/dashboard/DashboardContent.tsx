@@ -57,9 +57,9 @@ const PLAN_COLORS: Record<string, string> = {
   reif: "#10b981",
 };
 const PLAN_RATES: Record<string, string> = {
-  premium: "15% p.a.",
-  premium_plus: "17% p.a.",
-  reif: "12% p.a.",
+  premium: "20% p.a.",
+  premium_plus: "12% p.a.",
+  reif: "22% p.a.",
 };
 
 function parseTenorToMonths(tenor?: string | null) {

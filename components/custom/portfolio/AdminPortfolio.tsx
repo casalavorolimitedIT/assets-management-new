@@ -66,7 +66,7 @@ const PLAN_META: Record<
     icon: Crown,
     gradient: "from-amber-500 via-orange-500 to-[#ff6900]",
     color: "#ff6900",
-    rate: 0.17,
+    rate: 0.12,
     description: "Fixed lump-sum with priority returns",
   },
   premium: {
@@ -74,7 +74,7 @@ const PLAN_META: Record<
     icon: Star,
     gradient: "from-blue-500 via-indigo-500 to-violet-600",
     color: "#6366f1",
-    rate: 0.15,
+    rate: 0.2,
     description: "Monthly contribution savings plan",
   },
   reif: {
@@ -82,7 +82,7 @@ const PLAN_META: Record<
     icon: Zap,
     gradient: "from-emerald-400 via-teal-500 to-cyan-600",
     color: "#10b981",
-    rate: 0.12,
+    rate: 0.22,
     description: "Real Estate Investment Fund",
   },
 };

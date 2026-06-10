@@ -209,7 +209,7 @@ const BroadcastPage = () => {
   };
 
   const handleSendEmail = useCallback(
-    async (subject: string, body: string) => {
+    async (subject: string, body: string, preheader?: string) => {
       setSending(true);
       try {
         const recipients = selectedUsers.map((u) => ({
@@ -218,14 +218,25 @@ const BroadcastPage = () => {
           name: `${u.first_name} ${u.last_name}`,
         }));
 
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_SMTP_URL}/send-bulk-email`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ subject, body, recipients }),
-          },
-        );
+        // Convert plain-text paragraphs to HTML so the template renders them correctly
+        const htmlBody = body
+          .split(/\n{2,}/)
+          .map((para) =>
+            `<p style="margin:0 0 16px;">${para.replace(/\n/g, "<br />")}</p>`,
+          )
+          .join("");
+
+        const response = await fetch("/api/send-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject,
+            title: subject,
+            preheader,
+            body: htmlBody,
+            recipients,
+          }),
+        });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => null);
@@ -234,9 +245,11 @@ const BroadcastPage = () => {
           );
         }
 
+        const result = await response.json() as { sent: number; failed?: number };
+        const sentCount = result.sent ?? recipients.length;
         setToast({
-          message: `Email sent to ${recipients.length} recipient${recipients.length !== 1 ? "s" : ""}`,
-          type: "success",
+          message: `Email sent to ${sentCount} recipient${sentCount !== 1 ? "s" : ""}${result.failed ? ` (${result.failed} failed)` : ""}`,
+          type: result.failed ? "error" : "success",
         });
         handleClear();
       } catch (err) {

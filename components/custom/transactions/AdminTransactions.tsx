@@ -157,7 +157,10 @@ function getMonthlyPlanAmount(plan: InvestmentPlan) {
   return Number(plan.monthly_amount_figures ?? 0) || 0;
 }
 
-function buildApprovalEmailBody(tx: AdminTransaction, planLabel: string) {
+function buildApprovalEmailBody(
+  tx: AdminTransaction,
+  planLabel: string,
+): string {
   const investorName = getUserName(tx.user);
   const paymentMode = tx.mode_of_payment ?? "Not specified";
   const tenor = tx.tenor ?? "N/A";
@@ -165,59 +168,36 @@ function buildApprovalEmailBody(tx: AdminTransaction, planLabel: string) {
   const amount = fmt(tx.amount);
 
   return `
-    <div style="font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8fafc; padding: 32px 16px;">
-      <div style="max-width: 600px; margin: 0 auto; background: #ffffff; border-radius: 24px; overflow: hidden; box-shadow: 0 24px 80px rgba(15, 23, 42, 0.08);">
-        <div style="background: linear-gradient(90deg, #ff6900 0%, #ff9f5a 100%); padding: 28px 32px; text-align: center; color: #ffffff;">
-          <p style="font-size: 14px; letter-spacing: 0.2em; margin: 0; text-transform: uppercase; opacity: 0.9;">Casalavoro Limited</p>
-          <h1 style="font-size: 28px; font-weight: 800; margin: 12px 0 0;">Payment Approved</h1>
-        </div>
+    <p style="margin:0 0 20px;">Hi ${investorName},</p>
+    <p style="margin:0 0 24px;">Your payment for the <strong>${planLabel}</strong> investment plan has been approved and is now active. Your account has been updated — you can view the details in your dashboard.</p>
 
-        <div style="padding: 32px; color: #111827;">
-          <p style="font-size: 16px; margin: 0 0 20px;">Hi ${investorName},</p>
-          <p style="font-size: 16px; margin: 0 0 24px; color: #334155;">Your payment for the <strong>${planLabel}</strong> investment plan has been approved and is now active. We have updated your account and you can view the investment details in your dashboard.</p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+      style="border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate;margin-bottom:8px;background:#f9fafb;">
+      <tr>
+        <td style="padding:14px 20px 8px;font-size:12px;font-weight:700;color:#6b7280;letter-spacing:0.8px;text-transform:uppercase;">
+          Payment Summary
+        </td>
+      </tr>
+      ${[
+        ["Transaction ID", tx.id.slice(0, 8).toUpperCase()],
+        ["Plan", planLabel],
+        ["Amount", amount],
+        ["Tenor", tenor],
+        ["Payment Mode", paymentMode],
+        ["Date", transactionDate],
+      ]
+        .map(
+          ([label, value], i, arr) => `
+      <tr>
+        <td style="padding:10px 20px${i === arr.length - 1 ? " 14px" : ""};width:150px;font-size:13px;color:#6b7280;border-top:1px solid #e5e7eb;">${label}</td>
+        <td style="padding:10px 20px${i === arr.length - 1 ? " 14px" : ""};font-size:13px;font-weight:600;color:#111827;border-top:1px solid #e5e7eb;">${value}</td>
+      </tr>`,
+        )
+        .join("")}
+    </table>
 
-          <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 18px; padding: 24px; margin-bottom: 24px;">
-            <h2 style="font-size: 16px; font-weight: 700; margin: 0 0 16px; color: #0f172a;">Payment summary</h2>
-            <table style="width: 100%; border-collapse: collapse; color: #334155; font-size: 15px;">
-              <tbody>
-                <tr>
-                  <td style="padding: 10px 0; width: 170px; color: #64748b;">Transaction ID</td>
-                  <td style="padding: 10px 0;">${tx.id.toUpperCase()}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 10px 0; color: #64748b;">Plan</td>
-                  <td style="padding: 10px 0;">${planLabel}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 10px 0; color: #64748b;">Amount</td>
-                  <td style="padding: 10px 0;">${amount}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 10px 0; color: #64748b;">Tenor</td>
-                  <td style="padding: 10px 0;">${tenor}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 10px 0; color: #64748b;">Payment mode</td>
-                  <td style="padding: 10px 0;">${paymentMode}</td>
-                </tr>
-                <tr>
-                  <td style="padding: 10px 0; color: #64748b;">Date</td>
-                  <td style="padding: 10px 0;">${transactionDate}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <p style="font-size: 16px; margin: 0 0 20px; color: #475569;">If you have any questions, reply to this email and our support team will assist you promptly.</p>
-          <p style="font-size: 16px; margin: 0 0 4px; color: #0f172a;">Thank you for investing with us.</p>
-          <p style="font-size: 16px; color: #64748b; margin: 0;">Casalavoro Limited</p>
-        </div>
-
-        <div style="background: #f8fafc; padding: 20px 32px; text-align: center; color: #475569; font-size: 14px;">
-          <p style="margin: 0;">Visit your dashboard to manage your investments and track performance in real time.</p>
-        </div>
-      </div>
-    </div>
+    <p style="margin:24px 0 4px;color:#6b7280;font-size:14px;">If you have any questions, reply to this email and our support team will assist you.</p>
+    <p style="margin:4px 0 0;font-size:14px;">Thank you for investing with us.</p>
   `;
 }
 
@@ -225,32 +205,36 @@ async function sendApprovalEmail(
   tx: AdminTransaction,
   planLabel: string,
 ): Promise<Error | null> {
-  const smtpUrl = process.env.NEXT_PUBLIC_SMTP_URL;
-  if (!smtpUrl) return new Error("SMTP server URL is not configured.");
   if (!tx.user?.email) return new Error("User email is not available.");
 
-  const subject = `Your ${planLabel} payment is approved`;
-  const body = buildApprovalEmailBody(tx, planLabel);
-  const recipients = [
-    {
-      id: tx.user.id,
-      email: tx.user.email,
-      name: getUserName(tx.user),
-    },
-  ];
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
 
   try {
-    const response = await fetch(`${smtpUrl}/send-bulk-email`, {
+    const response = await fetch("/api/send-email", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, body, recipients }),
+      body: JSON.stringify({
+        subject: `Your ${planLabel} payment is approved`,
+        title: "Payment Approved",
+        preheader: `Your ${planLabel} investment payment has been approved and is now active.`,
+        body: buildApprovalEmailBody(tx, planLabel),
+        ctaLabel: "View Dashboard",
+        ctaUrl: `${appUrl}/dashboard`,
+        recipients: [
+          {
+            id: tx.user.id,
+            email: tx.user.email,
+            name: getUserName(tx.user),
+          },
+        ],
+      }),
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
       return new Error(
-        errorData?.message ||
-          `SMTP request failed with status ${response.status}`,
+        errorData?.message ??
+          `Email API responded with status ${response.status}`,
       );
     }
 
@@ -261,7 +245,6 @@ async function sendApprovalEmail(
       : new Error("Failed to send approval email.");
   }
 }
-
 function StatusBadge({ status }: { status: TxStatus }) {
   const meta = STATUS_META[status] ?? STATUS_META.pending;
   return (

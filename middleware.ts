@@ -52,7 +52,13 @@ export async function middleware(request: NextRequest) {
   }
 
   // Check gateway secret for API routes
-  if (isApiRoute) {
+  // Internal routes that rely on session auth instead of the gateway secret
+  const INTERNAL_API_ROUTES = ["/api/send-email"];
+  const isInternalApiRoute = INTERNAL_API_ROUTES.some((r) =>
+    request.nextUrl.pathname.startsWith(r),
+  );
+
+  if (isApiRoute && !isInternalApiRoute) {
     const gatewaySecret = request.headers.get("x-api-gateway-secret");
     if (gatewaySecret !== process.env.SUPABASE_API_GATEWAY_SECRET) {
       return new NextResponse("Unauthorized", { status: 401 });

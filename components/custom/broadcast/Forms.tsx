@@ -49,6 +49,89 @@ type MutableCompliance = Partial<Compliance> & {
 const inputCls =
   "w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition";
 
+// ─── Shared email helper ──────────────────────────────────────────────────────
+
+const fmt = (n: number) =>
+  new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    maximumFractionDigits: 0,
+  }).format(n);
+
+const fmtDate = (s: string) =>
+  new Date(s).toLocaleDateString("en-NG", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+
+const PLAN_LABELS: Record<string, string> = {
+  premium_plus: "Premium Plus",
+  premium: "Premium",
+  reif: "REIF",
+};
+
+function planLabel(plan: string) {
+  return PLAN_LABELS[plan] ?? plan;
+}
+
+function summaryTable(rows: [string, string][]): string {
+  return `
+<table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+  style="border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate;margin:20px 0;background:#f9fafb;">
+  <tr>
+    <td colspan="2" style="padding:12px 20px 8px;font-size:11px;font-weight:700;color:#6b7280;letter-spacing:0.8px;text-transform:uppercase;">
+      Transaction Details
+    </td>
+  </tr>
+  ${rows
+    .map(
+      ([label, value], i, arr) => `
+  <tr>
+    <td style="padding:10px 20px${i === arr.length - 1 ? " 14px" : ""};width:150px;font-size:13px;color:#6b7280;border-top:1px solid #e5e7eb;">${label}</td>
+    <td style="padding:10px 20px${i === arr.length - 1 ? " 14px" : ""};font-size:13px;font-weight:600;color:#111827;border-top:1px solid #e5e7eb;">${value}</td>
+  </tr>`,
+    )
+    .join("")}
+</table>`;
+}
+
+async function sendTransactionEmail(opts: {
+  user: User;
+  subject: string;
+  title: string;
+  preheader: string;
+  bodyHtml: string;
+}): Promise<void> {
+  const { user, subject, title, preheader, bodyHtml } = opts;
+  const response = await fetch("/api/send-email", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      subject,
+      title,
+      preheader,
+      body: bodyHtml,
+      ctaLabel: "View Dashboard",
+      ctaUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/dashboard`,
+      recipients: [
+        {
+          id: user.id,
+          email: user.email,
+          name: `${user.first_name} ${user.last_name}`.trim(),
+        },
+      ],
+    }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => null);
+    console.error(
+      `[sendTransactionEmail] failed for ${user.email}:`,
+      err?.message ?? response.status,
+    );
+  }
+}
+
 function parseCompliance(compliance: unknown): Partial<Compliance> | null {
   if (!compliance) return null;
   if (typeof compliance !== "string") return compliance as Partial<Compliance>;
@@ -174,6 +257,28 @@ function PayoutForm({
           });
         if (notifError)
           throw new Error(`Notification failed: ${notifError.message}`);
+
+        // Fire email — non-blocking, failures are logged but don't abort the payout
+        const planStr = plan.trim();
+        void sendTransactionEmail({
+          user,
+          subject: "Payout Processed on Your Account",
+          title: "Payout Processed",
+          preheader: `${amountWords.trim()} has been paid out to your account.`,
+          bodyHtml: `
+            <p style="margin:0 0 16px;">Hi ${user.first_name},</p>
+            <p style="margin:0 0 16px;">A payout has been successfully processed on your account. Please find the details below.</p>
+            ${summaryTable([
+              ...(planStr ? [["Plan", planLabel(planStr)] as [string, string]] : []),
+              ["Amount", fmt(amountNum)],
+              ["Amount in Words", amountWords.trim()],
+              ["Description", description.trim()],
+              ["Date", fmtDate(now)],
+              ["Status", "Processed"],
+            ])}
+            <p style="margin:0;color:#6b7280;font-size:14px;">If you have any questions about this payout, please contact our support team.</p>
+          `,
+        });
       }
 
       onSuccess(
@@ -483,6 +588,27 @@ function DebitForm({
 
       if (notifError)
         throw new Error(`Notification failed: ${notifError.message}`);
+
+      // Fire email — non-blocking, failures are logged but don't abort the debit
+      void sendTransactionEmail({
+        user,
+        subject: "Account Debit Notice",
+        title: "Account Debit",
+        preheader: `${amountWords.trim()} has been debited from your ${selectedTx.plan} plan.`,
+        bodyHtml: `
+          <p style="margin:0 0 16px;">Hi ${user.first_name},</p>
+          <p style="margin:0 0 16px;">An amount has been debited from your investment account. Please review the details below.</p>
+          ${summaryTable([
+            ["Plan", planLabel(selectedTx.plan)],
+            ["Amount Debited", fmt(amountNum)],
+            ["Amount in Words", amountWords.trim()],
+            ["Description", description.trim()],
+            ["Remaining Balance", fmt(Math.max(0, selectedBalance - amountNum))],
+            ["Date", fmtDate(now)],
+          ])}
+          <p style="margin:0;color:#6b7280;font-size:14px;">If you did not authorise this debit or have questions, please contact our support team immediately.</p>
+        `,
+      });
 
       onSuccess(
         `Debit of ₦${amountNum.toLocaleString()} applied to ${user.first_name} ${user.last_name}`,
@@ -851,11 +977,12 @@ export function EmailForm({
   sending,
 }: {
   selectedUsers: User[];
-  onSend: (subject: string, body: string) => Promise<void>;
+  onSend: (subject: string, body: string, preheader?: string) => Promise<void>;
   sending: boolean;
 }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [preheader, setPreheader] = useState("");
 
   return (
     <div className="space-y-5">
@@ -870,6 +997,21 @@ export function EmailForm({
         />
       </Field>
 
+      <Field
+        label="Preview text"
+        id="email-preheader"
+        hint="Short line shown in the inbox before the email is opened. Optional."
+      >
+        <input
+          id="email-preheader"
+          type="text"
+          placeholder="e.g. Your investment update from Casa Lavoro…"
+          value={preheader}
+          onChange={(e) => setPreheader(e.target.value)}
+          className={inputCls}
+        />
+      </Field>
+
       <Field label="Message body" id="email-body">
         <textarea
           id="email-body"
@@ -877,14 +1019,14 @@ export function EmailForm({
           placeholder="Write your message…"
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          className={`${inputCls} resize-none font-mono leading-relaxed`}
+          className={`${inputCls} resize-none leading-relaxed`}
         />
       </Field>
 
       <RecipientsPreview users={selectedUsers} />
 
       <button
-        onClick={() => onSend(subject, body)}
+        onClick={() => onSend(subject, body, preheader || undefined)}
         disabled={
           !subject.trim() ||
           !body.trim() ||

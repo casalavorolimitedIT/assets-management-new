@@ -5,6 +5,7 @@ import {
   AlertCircle,
   Banknote,
   CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Clock3,
@@ -30,6 +31,8 @@ type CalendarEvent = {
   amount: number;
   principal: number;
   tenorMonths: number;
+  planIndex: number;
+  hasPaid: boolean;
   user: UserProfile;
   plan: InvestmentPlan;
   compliance: Partial<Compliance> | null;
@@ -93,8 +96,8 @@ function getPlans(user: UserProfile): InvestmentPlan[] {
 
 function getPlanAmount(plan: InvestmentPlan) {
   const value =
-    plan.total_figures ??
     plan.monthly_amount_figures ??
+    plan.total_figures ??
     (plan as unknown as { amount_figures?: number }).amount_figures ??
     0;
 
@@ -208,6 +211,8 @@ function buildPayoutEvents(users: UserProfile[], visibleMonth: Date) {
             amount: getExpectedPayoutAmount(plan, tenorMonths),
             principal: getPlanAmount(plan),
             tenorMonths,
+            planIndex,
+            hasPaid: plan.has_paid === true,
             user,
             plan,
             compliance,
@@ -276,6 +281,8 @@ export default function PayoutSchedulePage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
   const [visibleMonth, setVisibleMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
@@ -312,6 +319,61 @@ export default function PayoutSchedulePage() {
     void fetchUsers();
   }, [fetchUsers]);
 
+  const markAsPaid = async (event: CalendarEvent) => {
+    setMarkingId(event.id);
+    setActionError(null);
+
+    try {
+      const compliance = parseCompliance(event.user.compliance);
+      if (!compliance) throw new Error("No compliance data found.");
+
+      let updatedCompliance: Partial<Compliance>;
+
+      if (Array.isArray(compliance.investment_plans)) {
+        const plans = compliance.investment_plans.map((p, i) =>
+          i === event.planIndex ? { ...p, has_paid: true } : p,
+        );
+        updatedCompliance = {
+          ...compliance,
+          investment_plans: plans,
+          ...(event.planIndex === 0 && compliance.investment_plan
+            ? { investment_plan: { ...compliance.investment_plan, has_paid: true } }
+            : {}),
+        };
+      } else {
+        updatedCompliance = {
+          ...compliance,
+          investment_plan: { ...compliance.investment_plan!, has_paid: true },
+        };
+      }
+
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({ compliance: updatedCompliance })
+        .eq("id", event.user.id);
+
+      if (updateError) throw updateError;
+
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id !== event.user.id
+            ? u
+            : { ...u, compliance: updatedCompliance as Compliance },
+        ),
+      );
+
+      setSelected((prev) =>
+        prev?.id === event.id ? { ...prev, hasPaid: true } : prev,
+      );
+    } catch (err) {
+      setActionError(
+        err instanceof Error ? err.message : "Failed to mark as paid.",
+      );
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
   const events = useMemo(
     () => buildPayoutEvents(users, visibleMonth),
     [users, visibleMonth],
@@ -341,6 +403,11 @@ export default function PayoutSchedulePage() {
   }, [events, search]);
 
   const calendarCells = useMemo(() => getMonthCells(visibleMonth), [visibleMonth]);
+
+  const today = useMemo(
+    () => new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate()),
+    [],
+  );
 
   const stats = useMemo(() => {
     const totalAmount = filteredEvents.reduce(
@@ -491,6 +558,20 @@ export default function PayoutSchedulePage() {
             />
           </div>
         </div>
+
+        {/* Legend */}
+        <div className="mt-3 flex items-center gap-4 border-t border-zinc-100 pt-3">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Legend</span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700">
+            <span className="size-2.5 rounded-full bg-emerald-500" /> Paid
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-red-600">
+            <span className="size-2.5 rounded-full bg-red-500" /> Overdue
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#ff6900]">
+            <span className="size-2.5 rounded-full bg-[#ff6900]" /> Upcoming
+          </span>
+        </div>
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -543,25 +624,46 @@ export default function PayoutSchedulePage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  {dayEvents.slice(0, 4).map((event) => (
-                    <button
-                      key={event.id}
-                      onClick={() => setSelected(event)}
-                      className="group w-full rounded-lg border border-[#ffd8bd] bg-[#fff7f0] px-2 py-1.5 text-left transition-colors hover:border-[#ff6900] hover:bg-[#fff1e6]"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="min-w-0 truncate text-xs font-bold text-zinc-900">
-                          {getUserName(event.user)}
-                        </span>
-                        <span className="shrink-0 text-[10px] font-bold tabular-nums text-[#ff6900]">
-                          {formatCurrency(event.amount)}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 truncate text-[10px] font-medium text-zinc-500">
-                        {PLAN_LABELS[event.plan.plan] ?? event.plan.plan}
-                      </p>
-                    </button>
-                  ))}
+                  {dayEvents.slice(0, 4).map((event) => {
+                    const isOverdue = event.date < today && !event.hasPaid;
+                    const isPaid = event.hasPaid;
+
+                    return (
+                      <button
+                        key={event.id}
+                        onClick={() => setSelected(event)}
+                        className={`group w-full rounded-lg border px-2 py-1.5 text-left transition-colors ${
+                          isPaid
+                            ? "border-emerald-300 bg-emerald-50 hover:border-emerald-500 hover:bg-emerald-100"
+                            : isOverdue
+                              ? "border-red-300 bg-red-50 hover:border-red-500 hover:bg-red-100"
+                              : "border-[#ffd8bd] bg-[#fff7f0] hover:border-[#ff6900] hover:bg-[#fff1e6]"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate text-xs font-bold text-zinc-900">
+                            {getUserName(event.user)}
+                          </span>
+                          <span
+                            className={`shrink-0 text-[10px] font-bold tabular-nums ${
+                              isPaid
+                                ? "text-emerald-600"
+                                : isOverdue
+                                  ? "text-red-600"
+                                  : "text-[#ff6900]"
+                            }`}
+                          >
+                            {formatCurrency(event.amount)}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 truncate text-[10px] font-medium text-zinc-500">
+                          {PLAN_LABELS[event.plan.plan] ?? event.plan.plan}
+                          {isPaid && " · Paid"}
+                          {isOverdue && " · Overdue"}
+                        </p>
+                      </button>
+                    );
+                  })}
 
                   {dayEvents.length > 4 && (
                     <button
@@ -598,12 +700,24 @@ export default function PayoutSchedulePage() {
             className="absolute inset-0 bg-black/45"
             onClick={() => setSelected(null)}
           />
-          <div className="relative max-h-full w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl">
+          <div className="relative max-h-full w-full max-w-3xl overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
             <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4">
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-wider text-[#ff6900]">
-                  Payout Details
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-[#ff6900]">
+                    Payout Details
+                  </p>
+                  {selected.hasPaid && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                      <CheckCircle2 className="size-3" /> Paid
+                    </span>
+                  )}
+                  {!selected.hasPaid && selected.date < today && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
+                      <AlertCircle className="size-3" /> Overdue
+                    </span>
+                  )}
+                </div>
                 <h2 className="mt-1 truncate text-lg font-bold text-zinc-950">
                   {formatCurrency(selected.amount)} to{" "}
                   {getUserName(selected.user)}
@@ -621,7 +735,7 @@ export default function PayoutSchedulePage() {
               </button>
             </div>
 
-            <div className="max-h-[calc(100vh-150px)] overflow-y-auto px-5 py-5">
+            <div className="max-h-[calc(100vh-220px)] overflow-y-auto px-5 py-5">
               <div className="mb-5 flex items-center gap-3 rounded-2xl bg-zinc-950 p-4 text-white">
                 <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-bold">
                   {getInitials(selected.user)}
@@ -760,6 +874,42 @@ export default function PayoutSchedulePage() {
                     />
                   </div>
                 </section>
+              </div>
+            </div>
+
+            {/* Modal footer — Mark as Paid action */}
+            <div className="border-t border-zinc-200 px-5 py-4">
+              {actionError && (
+                <p className="mb-3 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <AlertCircle className="size-3.5 shrink-0" />
+                  {actionError}
+                </p>
+              )}
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-zinc-400">
+                  {selected.hasPaid
+                    ? "This payout has been marked as paid."
+                    : "Mark this payout as completed once the transfer is done."}
+                </p>
+                {selected.hasPaid ? (
+                  <span className="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700">
+                    <CheckCircle2 className="size-4" />
+                    Marked as Paid
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => markAsPaid(selected)}
+                    disabled={markingId === selected.id}
+                    className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {markingId === selected.id ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="size-4" />
+                    )}
+                    Mark as Paid
+                  </button>
+                )}
               </div>
             </div>
           </div>

@@ -82,9 +82,9 @@ function getPlans(user: UserProfile): InvestmentPlan[] {
 
 function getPlanAmount(plan: InvestmentPlan) {
   const value =
+    plan.monthly_amount_figures ??
     plan.total_figures ??
     (plan as unknown as { amount_figures?: number }).amount_figures ??
-    plan.monthly_amount_figures ??
     0;
   return Number(value) || 0;
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { X, CheckCircle2, AlertCircle, Info } from "lucide-react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { X, CheckCircle2, AlertCircle, Info, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { TabSwitcher } from "@/components/custom/broadcast/Broadcast";
 import { FilterBar } from "@/components/custom/broadcast/FilterBar";
@@ -108,29 +108,32 @@ const BroadcastPage = () => {
   const [roles, setRoles] = useState<string[]>([]);
   const [filters, setFilters] = useState<Filter>(DEFAULT_FILTERS);
   const [currentPage, setCurrentPage] = useState(1);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  const fetchUsers = useCallback(async () => {
+    setLoadingUsers(true);
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("id, email, first_name, last_name, role, created_at")
+        .eq("role", "USER")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const fetched = (data as User[]) || [];
+      setUsers(fetched);
+      setRoles(
+        Array.from(new Set(fetched.map((u) => u.role).filter(Boolean))),
+      );
+    } catch {
+      setToast({ message: "Failed to load users", type: "error" });
+    } finally {
+      setLoadingUsers(false);
+    }
+  }, []);
 
   useEffect(() => {
-    (async () => {
-      setLoadingUsers(true);
-      try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("id, email, first_name, last_name, role, created_at")
-          .eq("role", "USER")
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        const fetched = (data as User[]) || [];
-        setUsers(fetched);
-        setRoles(
-          Array.from(new Set(fetched.map((u) => u.role).filter(Boolean))),
-        );
-      } catch {
-        setToast({ message: "Failed to load users", type: "error" });
-      } finally {
-        setLoadingUsers(false);
-      }
-    })();
-  }, []);
+    fetchUsers();
+  }, [fetchUsers, refreshTick]);
 
   useEffect(() => {
     let result = [...users];
@@ -333,15 +336,25 @@ const BroadcastPage = () => {
               >
                 Select Recipients
               </h2>
-              <span
-                className="text-xs text-slate-400"
-                aria-live="polite"
-                aria-atomic="true"
-              >
-                {loadingUsers
-                  ? "Loading…"
-                  : `${filteredUsers.length} user${filteredUsers.length !== 1 ? "s" : ""}`}
-              </span>
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-xs text-slate-400"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  {loadingUsers
+                    ? "Loading…"
+                    : `${filteredUsers.length} user${filteredUsers.length !== 1 ? "s" : ""}`}
+                </span>
+                <button
+                  onClick={() => setRefreshTick((t) => t + 1)}
+                  disabled={loadingUsers}
+                  aria-label="Refresh user list"
+                  className="p-1 text-slate-400 hover:text-slate-600 disabled:opacity-40 transition-colors"
+                >
+                  <RefreshCw size={13} className={loadingUsers ? "animate-spin" : ""} />
+                </button>
+              </div>
             </div>
 
             <FilterBar

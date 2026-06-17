@@ -12,6 +12,8 @@ import {
 import BankDetailsDisplay from "../BankDetailsDisplay";
 
 type ModalPlan = "premium_plus" | "premium" | "reif";
+const INVESTMENT_COMPANIES = ["Casalavoro Limited", "White Crust Limited"] as const;
+
 const TENORS = [
   "3 Months",
   "6 Months",
@@ -53,6 +55,9 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pendingPlanData, setPendingPlanData] = useState<InvestmentPlan | null>(null);
+
+  // Shared fields
+  const [investmentCompany, setInvestmentCompany] = useState("");
 
   // Premium Plus fields
   const [ppAmountFigures, setPpAmountFigures] = useState("");
@@ -112,6 +117,10 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
   // Step 2 → Step 3: validate fields then show transfer confirmation
   const handleProceedToConfirm = () => {
     setError(null);
+    if (!investmentCompany) {
+      setError("Please select an investment company.");
+      return;
+    }
     const planData = buildInvestmentPlan();
     if (!planData) {
       setError("Please fill in all required fields.");
@@ -151,6 +160,7 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
 
       const investmentPlanPayload: Record<string, unknown> = {
         plan: selectedPlan,
+        investment_company: investmentCompany,
         ...(selectedPlan === "premium_plus" && {
           investment_type: selectedPlan,
           amount_figures: Number(ppAmountFigures),
@@ -367,6 +377,14 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
                   {MODAL_PLANS.find((p) => p.value === selectedPlan)?.label}
                 </span>
               </div>
+
+              {/* Investment Company — shared across all plans */}
+              <SelectField
+                label="Investment Company"
+                value={investmentCompany}
+                onChange={setInvestmentCompany}
+                options={[...INVESTMENT_COMPANIES]}
+              />
 
               {/* Premium Plus */}
               {selectedPlan === "premium_plus" && (

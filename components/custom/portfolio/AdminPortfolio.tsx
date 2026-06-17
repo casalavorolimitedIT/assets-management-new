@@ -18,6 +18,7 @@ import {
   Info,
   Layers,
   Loader2,
+  Pencil,
   PiggyBank,
   RefreshCw,
   Search,
@@ -142,11 +143,12 @@ const getMaturityDate = (inv: InvestmentPlan): Date | null => {
   return d;
 };
 
+const getEffectiveRate = (inv: InvestmentPlan): number =>
+  inv.custom_rate ?? PLAN_META[inv.plan]?.rate ?? 0.15;
+
 const getProjectedReturn = (inv: InvestmentPlan): number => {
   const principal = getPrincipal(inv);
-  const months = parseInt(inv.tenor, 10) || 6;
-  const rate = PLAN_META[inv.plan]?.rate ?? 0.15;
-  return principal * (1 + (rate * months) / 12);
+  return principal * (1 + getEffectiveRate(inv));
 };
 
 const getProgress = (inv: InvestmentPlan): number => {
@@ -258,16 +260,25 @@ function PlanCard({
   inv,
   index,
   owner,
+  planIndex,
+  onRateUpdate,
 }: {
   inv: InvestmentPlan;
   index: number;
   owner?: UserProfile;
+  planIndex?: number;
+  onRateUpdate?: (newRate: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingRate, setEditingRate] = useState(false);
+  const [rateInput, setRateInput] = useState("");
+  const [savingRate, setSavingRate] = useState(false);
+
   const key = inv.plan.toLowerCase();
   const meta = PLAN_META[key] ?? PLAN_META.premium;
   const Icon = meta.icon;
 
+  const effectiveRate = getEffectiveRate(inv);
   const principal = getPrincipal(inv);
   const projected = getProjectedReturn(inv);
   const gain = projected - principal;
@@ -275,6 +286,52 @@ function PlanCard({
   const progress = getProgress(inv);
   const daysLeft = getDaysRemaining(inv);
   const maturity = getMaturityDate(inv);
+
+  const handleRateSave = async () => {
+    const newRate = parseFloat(rateInput) / 100;
+    if (isNaN(newRate) || newRate <= 0 || newRate > 1 || !owner || planIndex === undefined) {
+      setEditingRate(false);
+      return;
+    }
+    setSavingRate(true);
+    try {
+      const supabase = createClient();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("compliance")
+        .eq("id", owner.id)
+        .single();
+
+      const compliance = parseCompliance(profile?.compliance) ?? {};
+
+      let updatedCompliance: Record<string, unknown>;
+      if (Array.isArray(compliance.investment_plans)) {
+        const plans = (compliance.investment_plans as unknown[]).map(
+          (p, i) => (i === planIndex ? { ...(p as object), custom_rate: newRate } : p),
+        );
+        updatedCompliance = { ...compliance, investment_plans: plans };
+      } else if (compliance.investment_plan) {
+        updatedCompliance = {
+          ...compliance,
+          investment_plan: { ...(compliance.investment_plan as object), custom_rate: newRate },
+        };
+      } else {
+        return;
+      }
+
+      await supabase
+        .from("profiles")
+        .update({ compliance: updatedCompliance, updated_at: new Date().toISOString() })
+        .eq("id", owner.id);
+
+      onRateUpdate?.(newRate);
+    } catch {
+      // silent — editing cancelled
+    } finally {
+      setSavingRate(false);
+      setEditingRate(false);
+    }
+  };
 
   return (
     <div
@@ -360,12 +417,51 @@ function PlanCard({
             </p>
             <p className="text-[10px] text-zinc-400">Remaining</p>
           </div>
-          <div className="rounded-xl bg-zinc-50 p-3 text-center">
+          <div className="group/rate relative rounded-xl bg-zinc-50 p-3 text-center">
             <TrendingUp className="mx-auto mb-1 size-3.5 text-emerald-500" />
-            <p className="text-xs font-bold text-emerald-600">
-              {(meta.rate * 100).toFixed(0)}% p.a.
-            </p>
-            <p className="text-[10px] text-zinc-400">Rate</p>
+            {editingRate ? (
+              <div className="flex items-center justify-center gap-0.5">
+                <input
+                  autoFocus
+                  type="number"
+                  value={rateInput}
+                  onChange={(e) => setRateInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void handleRateSave();
+                    if (e.key === "Escape") setEditingRate(false);
+                  }}
+                  onBlur={() => void handleRateSave()}
+                  className="w-10 rounded border border-[#ff6900] bg-white px-1 py-0.5 text-center text-[10px] font-bold text-[#ff6900] outline-none"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                />
+                <span className="text-[10px] font-bold text-emerald-600">%</span>
+                {savingRate && <Loader2 className="size-2.5 animate-spin text-zinc-400" />}
+              </div>
+            ) : (
+              <>
+                <p className="text-xs font-bold text-emerald-600">
+                  {(effectiveRate * 100).toFixed(0)}%
+                  {inv.custom_rate !== undefined && (
+                    <span className="ml-0.5 text-[9px] text-[#ff6900]">✦</span>
+                  )}
+                </p>
+                {owner && (
+                  <button
+                    onClick={() => {
+                      setRateInput((effectiveRate * 100).toFixed(1));
+                      setEditingRate(true);
+                    }}
+                    className="absolute right-1 top-1 rounded p-0.5 opacity-0 transition-opacity group-hover/rate:opacity-100 hover:bg-zinc-200"
+                    title="Edit rate"
+                  >
+                    <Pencil className="size-2.5 text-zinc-400" />
+                  </button>
+                )}
+              </>
+            )}
+            <p className="text-[10px] text-zinc-400">Rate p.a.</p>
           </div>
         </div>
 
@@ -862,7 +958,24 @@ export default function AdminPortfolio() {
 
   // Visible plans from filtered portfolios - for stats bar and plan cards
   const visiblePlans = searchedPortfolios.flatMap(({ user, plans }) =>
-    plans.map((plan) => ({ plan, owner: user })),
+    plans.map((plan, planIndex) => ({ plan, owner: user, planIndex })),
+  );
+
+  const handleRateUpdate = useCallback(
+    (userId: string, planIdx: number, newRate: number) => {
+      setPortfolios((prev) =>
+        prev.map((portfolio) => {
+          if (portfolio.user.id !== userId) return portfolio;
+          return {
+            ...portfolio,
+            plans: portfolio.plans.map((p, i) =>
+              i === planIdx ? { ...p, custom_rate: newRate } : p,
+            ),
+          };
+        }),
+      );
+    },
+    [],
   );
 
   const plansByTab =
@@ -888,10 +1001,8 @@ export default function AdminPortfolio() {
   const totalGain = totalProjected - totalPrincipal;
   const avgRate =
     filteredPlans.length > 0
-      ? filteredPlans.reduce(
-          (s, p) => s + (PLAN_META[p.plan]?.rate ?? 0.15),
-          0,
-        ) / filteredPlans.length
+      ? filteredPlans.reduce((s, p) => s + getEffectiveRate(p), 0) /
+        filteredPlans.length
       : 0;
 
   const planTypes = Array.from(new Set(filteredPlans.map((p) => p.plan)));
@@ -1188,12 +1299,14 @@ export default function AdminPortfolio() {
             )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {paginatedPlans.map(({ plan, owner }, i) => (
+              {paginatedPlans.map(({ plan, owner, planIndex }, i) => (
                 <PlanCard
                   key={`${owner.id}-${plan.plan}-${i}`}
                   inv={plan}
                   owner={owner}
                   index={i}
+                  planIndex={planIndex}
+                  onRateUpdate={(newRate) => handleRateUpdate(owner.id, planIndex, newRate)}
                 />
               ))}
             </div>

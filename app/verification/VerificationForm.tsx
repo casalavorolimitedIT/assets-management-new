@@ -77,6 +77,7 @@ interface FormValues {
   nextOfKinAddress: string;
   signature: File | null;
   // Step 3
+  investmentCompany: string;
   investmentPlan: InvestmentPlan;
   ppInvestmentType: string;
   ppAmountFigures: string;
@@ -178,6 +179,7 @@ const TENORS = [
 ];
 const PAYMENT_MODES = ["Bank Transfer", "Cheque", "Cash"];
 const INTEREST_MODES = ["Upfront", "Monthly", "End of Tenor"];
+const INVESTMENT_COMPANIES = ["Casalavoro Limited", "White Crust Limited"];
 const NIGERIAN_STATES = [
   "Abia",
   "Adamawa",
@@ -251,6 +253,7 @@ const step2Schema = Yup.object({
 });
 
 const step3Schema = Yup.object({
+  investmentCompany: Yup.string().required("Investment company is required"),
   investmentPlan: Yup.string()
     .oneOf(["premium_plus", "premium", "reif"], "Select an investment plan")
     .required("Select an investment plan"),
@@ -405,6 +408,7 @@ async function submitVerification(
 
   const investmentPlanPayload: Record<string, unknown> = {
     plan: values.investmentPlan,
+    investment_company: values.investmentCompany,
     ...(values.investmentPlan === "premium_plus" && {
       amount_figures: values.ppAmountFigures
         ? Number(values.ppAmountFigures)
@@ -643,6 +647,7 @@ function getStepFields(step: number): (keyof FormValues)[] {
     ];
   if (step === 3)
     return [
+      "investmentCompany",
       "investmentPlan",
       "ppInvestmentType",
       "ppAmountFigures",
@@ -711,6 +716,7 @@ function buildInitialValues(
     nextOfKinPhone: "",
     nextOfKinAddress: "",
     signature: null,
+    investmentCompany: "",
     investmentPlan: "",
     ppInvestmentType: "",
     ppAmountFigures: "",
@@ -1470,6 +1476,29 @@ function StepThree({ formik, fieldError }: StepProps) {
         title="Investment Plan"
         description="Choose your preferred investment plan and fill in the details."
       />
+
+      <FieldGroup
+        label="Investment Company"
+        error={fieldError("investmentCompany")}
+      >
+        <Select
+          value={f.investmentCompany}
+          onValueChange={(v) => set("investmentCompany", v)}
+        >
+          <SelectTrigger
+            className={`${inputCls} ${fieldError("investmentCompany") ? "border-destructive" : ""}`}
+          >
+            <SelectValue placeholder="Select company" />
+          </SelectTrigger>
+          <SelectContent>
+            {INVESTMENT_COMPANIES.map((c) => (
+              <SelectItem key={c} value={c}>
+                {c}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </FieldGroup>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {plans.map((plan) => (

@@ -25,6 +25,8 @@ import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 import type { Compliance, InvestmentPlan, UserProfile } from "@/types";
 
+type EventType = "upfront" | "monthly" | "maturity";
+
 type CalendarEvent = {
   id: string;
   date: Date;
@@ -36,6 +38,8 @@ type CalendarEvent = {
   user: UserProfile;
   plan: InvestmentPlan;
   compliance: Partial<Compliance> | null;
+  eventType: EventType;
+  monthNumber?: number;
 };
 
 const supabase = createClient();
@@ -114,15 +118,15 @@ function parseTenorToMonths(tenor?: string | null) {
   return Number.isNaN(months) ? 0 : months;
 }
 
-function getExpectedPayoutAmount(plan: InvestmentPlan, tenorMonths: number) {
+function getExpectedPayoutAmount(plan: InvestmentPlan) {
   const planWithReturns = plan as InvestmentPlan & {
     payout_amount?: number;
     returns?: number;
   };
   const principal = getPlanAmount(plan);
   const planKey = plan.plan?.toLowerCase();
-  const annualRate = PLAN_RATES[planKey] ?? 0.15;
-  const expectedGrowth = principal * ((annualRate * tenorMonths) / 12);
+  const rate = plan.custom_rate ?? PLAN_RATES[planKey] ?? 0.15;
+  const expectedGrowth = principal * rate;
   const configuredPayout =
     planWithReturns.payout_amount ?? planWithReturns.returns;
 
@@ -174,19 +178,8 @@ function getMonthCells(month: Date) {
 }
 
 function buildPayoutEvents(users: UserProfile[], visibleMonth: Date) {
-  const rangeStart = new Date(
-    visibleMonth.getFullYear(),
-    visibleMonth.getMonth(),
-    1,
-  );
-  const rangeEnd = new Date(
-    visibleMonth.getFullYear(),
-    visibleMonth.getMonth() + 1,
-    0,
-    23,
-    59,
-    59,
-  );
+  const rangeStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+  const rangeEnd = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0, 23, 59, 59);
 
   return users
     .flatMap((user) => {
@@ -201,23 +194,56 @@ function buildPayoutEvents(users: UserProfile[], visibleMonth: Date) {
         const tenorMonths = parseTenorToMonths(plan.tenor);
         if (!tenorMonths) return [];
 
-        const payoutDate = addMonthsClamped(startDate, tenorMonths);
-        if (payoutDate < rangeStart || payoutDate > rangeEnd) return [];
+        const totalInterest = getExpectedPayoutAmount(plan);
+        const principal = getPlanAmount(plan);
+        const interestMode = plan.mode_of_interest ?? "";
 
-        return [
-          {
-            id: `${user.id}-${plan.plan}-${planIndex}-${tenorMonths}`,
-            date: payoutDate,
-            amount: getExpectedPayoutAmount(plan, tenorMonths),
-            principal: getPlanAmount(plan),
-            tenorMonths,
-            planIndex,
-            hasPaid: plan.has_paid === true,
-            user,
-            plan,
-            compliance,
-          },
-        ];
+        const makeEvent = (
+          date: Date,
+          amount: number,
+          eventType: EventType,
+          monthNumber?: number,
+        ): CalendarEvent => ({
+          id: `${user.id}-${plan.plan}-${planIndex}-${eventType}${monthNumber !== undefined ? `-${monthNumber}` : ""}`,
+          date,
+          amount,
+          principal,
+          tenorMonths,
+          planIndex,
+          hasPaid:
+            eventType === "monthly"
+              ? (plan.paid_months ?? []).includes(monthNumber!)
+              : plan.has_paid === true,
+          user,
+          plan,
+          compliance,
+          eventType,
+          monthNumber,
+        });
+
+        // Upfront: single interest payment at investment start date
+        if (interestMode === "Upfront") {
+          if (startDate < rangeStart || startDate > rangeEnd) return [];
+          return [makeEvent(startDate, totalInterest, "upfront")];
+        }
+
+        // Monthly: one interest installment per month throughout the tenor
+        if (interestMode === "Monthly") {
+          const monthlyAmount = totalInterest / tenorMonths;
+          const events: CalendarEvent[] = [];
+          for (let m = 1; m <= tenorMonths; m++) {
+            const eventDate = addMonthsClamped(startDate, m);
+            if (eventDate >= rangeStart && eventDate <= rangeEnd) {
+              events.push(makeEvent(eventDate, monthlyAmount, "monthly", m));
+            }
+          }
+          return events;
+        }
+
+        // End of Tenor (default): single payment at maturity
+        const maturityDate = addMonthsClamped(startDate, tenorMonths);
+        if (maturityDate < rangeStart || maturityDate > rangeEnd) return [];
+        return [makeEvent(maturityDate, totalInterest, "maturity")];
       });
     })
     .sort((a, b) => {
@@ -329,21 +355,30 @@ export default function PayoutSchedulePage() {
 
       let updatedCompliance: Partial<Compliance>;
 
+      const patchPlan = (plan: InvestmentPlan): InvestmentPlan => {
+        if (event.eventType === "monthly" && event.monthNumber !== undefined) {
+          const paidMonths = [...(plan.paid_months ?? [])];
+          if (!paidMonths.includes(event.monthNumber)) paidMonths.push(event.monthNumber);
+          return { ...plan, paid_months: paidMonths };
+        }
+        return { ...plan, has_paid: true };
+      };
+
       if (Array.isArray(compliance.investment_plans)) {
         const plans = compliance.investment_plans.map((p, i) =>
-          i === event.planIndex ? { ...p, has_paid: true } : p,
+          i === event.planIndex ? patchPlan(p) : p,
         );
         updatedCompliance = {
           ...compliance,
           investment_plans: plans,
           ...(event.planIndex === 0 && compliance.investment_plan
-            ? { investment_plan: { ...compliance.investment_plan, has_paid: true } }
+            ? { investment_plan: patchPlan(compliance.investment_plan) }
             : {}),
         };
       } else {
         updatedCompliance = {
           ...compliance,
-          investment_plan: { ...compliance.investment_plan!, has_paid: true },
+          investment_plan: patchPlan(compliance.investment_plan!),
         };
       }
 
@@ -560,7 +595,7 @@ export default function PayoutSchedulePage() {
         </div>
 
         {/* Legend */}
-        <div className="mt-3 flex items-center gap-4 border-t border-zinc-100 pt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-4 border-t border-zinc-100 pt-3">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">Legend</span>
           <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700">
             <span className="size-2.5 rounded-full bg-emerald-500" /> Paid
@@ -570,6 +605,10 @@ export default function PayoutSchedulePage() {
           </span>
           <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#ff6900]">
             <span className="size-2.5 rounded-full bg-[#ff6900]" /> Upcoming
+          </span>
+          <span className="ml-auto hidden items-center gap-3 text-[10px] text-zinc-400 sm:flex">
+            <span>M1/12 = monthly installment</span>
+            <span>· Upfront = interest paid at start</span>
           </span>
         </div>
       </div>
@@ -658,6 +697,11 @@ export default function PayoutSchedulePage() {
                         </div>
                         <p className="mt-0.5 truncate text-[10px] font-medium text-zinc-500">
                           {PLAN_LABELS[event.plan.plan] ?? event.plan.plan}
+                          {event.eventType === "monthly" && event.monthNumber !== undefined
+                            ? ` · M${event.monthNumber}/${event.tenorMonths}`
+                            : event.eventType === "upfront"
+                              ? " · Upfront"
+                              : null}
                           {isPaid && " · Paid"}
                           {isOverdue && " · Overdue"}
                         </p>
@@ -705,7 +749,11 @@ export default function PayoutSchedulePage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <p className="text-xs font-semibold uppercase tracking-wider text-[#ff6900]">
-                    Payout Details
+                    {selected.eventType === "monthly"
+                      ? "Monthly Installment"
+                      : selected.eventType === "upfront"
+                        ? "Upfront Interest"
+                        : "Payout Details"}
                   </p>
                   {selected.hasPaid && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
@@ -789,6 +837,12 @@ export default function PayoutSchedulePage() {
                       label="Interest repayment"
                       value={selected.plan.mode_of_interest}
                     />
+                    {selected.eventType === "monthly" && selected.monthNumber !== undefined && (
+                      <DetailRow
+                        label="Installment"
+                        value={`Month ${selected.monthNumber} of ${selected.tenorMonths}`}
+                      />
+                    )}
                     <DetailRow
                       label="Amount in words"
                       value={selected.plan.monthly_amount_words}

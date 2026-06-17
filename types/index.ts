@@ -42,6 +42,8 @@ export interface InvestmentPlan {
   monthly_payment_date: string;
   monthly_amount_figures: number;
   has_paid?: boolean;
+  paid_months?: number[];
+  custom_rate?: number;
 }
 
 export interface Compliance {

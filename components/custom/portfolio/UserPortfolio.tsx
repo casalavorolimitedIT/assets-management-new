@@ -34,6 +34,7 @@ interface InvestmentPlan {
   mode_of_payment?: string;
   mode_of_interest?: string;
   units?: number;
+  custom_rate?: number;
 }
 
 const PLAN_META: Record<
@@ -97,11 +98,12 @@ const getMaturityDate = (inv: InvestmentPlan): Date | null => {
   return d;
 };
 
+const getEffectiveRate = (inv: InvestmentPlan): number =>
+  inv.custom_rate ?? PLAN_META[inv.plan]?.rate ?? 0.15;
+
 const getProjectedReturn = (inv: InvestmentPlan): number => {
   const principal = getPrincipal(inv);
-  const months = parseInt(inv.tenor) || 6;
-  const rate = PLAN_META[inv.plan]?.rate ?? 0.15;
-  return principal * (1 + (rate * months) / 12);
+  return principal * (1 + getEffectiveRate(inv));
 };
 
 const getProgress = (inv: InvestmentPlan): number => {
@@ -299,7 +301,7 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
           <div className="rounded-xl bg-zinc-50 p-3 text-center">
             <TrendingUp className="size-3.5 text-emerald-500 mx-auto mb-1" />
             <p className="text-xs font-bold text-emerald-600">
-              {(meta.rate * 100).toFixed(0)}% p.a.
+              {(getEffectiveRate(inv) * 100).toFixed(0)}% p.a.
             </p>
             <p className="text-[10px] text-zinc-400">Rate</p>
           </div>
@@ -512,8 +514,7 @@ export default function UserPortfolio() {
   const totalGain = totalProjected - totalPrincipal;
   const avgRate =
     allPlans.length > 0
-      ? allPlans.reduce((s, p) => s + (PLAN_META[p.plan]?.rate ?? 0.15), 0) /
-        allPlans.length
+      ? allPlans.reduce((s, p) => s + getEffectiveRate(p), 0) / allPlans.length
       : 0;
 
   const planTypes = Array.from(new Set(allPlans.map((p) => p.plan)));

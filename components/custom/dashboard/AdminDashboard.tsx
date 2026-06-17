@@ -183,9 +183,10 @@ function getUpcomingPayouts(
         premium: 0.2,
         reif: 0.22,
       };
-      const annualRate = PLAN_RATES[planKey] ?? 0.15;
+      const rate =
+        (plan.custom_rate as number | undefined) ?? PLAN_RATES[planKey] ?? 0.15;
 
-      const expectedReturns = principal * (1 + (annualRate * monthsToAdd) / 12);
+      const expectedReturns = principal * rate;
 
       const payoutAmount =
         plan.payout_amount ?? plan.returns ?? expectedReturns;

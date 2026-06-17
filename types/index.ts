@@ -41,6 +41,7 @@ export interface InvestmentPlan {
   monthly_amount_words: string;
   monthly_payment_date: string;
   monthly_amount_figures: number;
+  investment_company?: string;
   has_paid?: boolean;
   paid_months?: number[];
   custom_rate?: number;
@@ -68,6 +69,7 @@ export interface UserProfile {
   compliance: Compliance;
   metamap_status: string | null;
   role: string;
+  email_changed?: boolean;
 }
 
 // ── Notification Form ─────────────────────────────────────────────────────────

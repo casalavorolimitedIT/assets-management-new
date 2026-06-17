@@ -500,6 +500,10 @@ function PlanCard({
         {expanded && (
           <div className="mt-2 space-y-2 border-t border-zinc-100 pt-3">
             {[
+              inv.investment_company && {
+                label: "Investment Company",
+                value: inv.investment_company,
+              },
               {
                 label: "Payment Date",
                 value: new Date(inv.monthly_payment_date).toLocaleDateString(

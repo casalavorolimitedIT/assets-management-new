@@ -23,6 +23,7 @@ import {
   Lock,
   Eye,
   EyeOff,
+  Mail,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { DeleteModal } from "../DeleteModal";
@@ -138,6 +139,12 @@ const Settings = () => {
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  // Email update state (one-time)
+  const [newEmail, setNewEmail] = useState("");
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuccess, setEmailSuccess] = useState(false);
+
   const supabase = createClient();
 
   useEffect(() => {
@@ -207,6 +214,46 @@ const Settings = () => {
       setShowDeleteModal(false);
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const handleUpdateEmail = async () => {
+    setEmailError(null);
+    setEmailSuccess(false);
+
+    const trimmed = newEmail.trim().toLowerCase();
+    if (!trimmed) { setEmailError("Please enter a new email address."); return; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) { setEmailError("Please enter a valid email address."); return; }
+    if (trimmed === userData?.email?.toLowerCase()) {
+      setEmailError("New email must be different from your current email.");
+      return;
+    }
+
+    try {
+      setEmailLoading(true);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated.");
+
+      const res = await fetch("/api/update-email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ newEmail: trimmed }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed to update email.");
+
+      setUserData((prev) => prev ? { ...prev, email: trimmed, email_changed: true } : prev);
+      setEmailSuccess(true);
+      setNewEmail("");
+    } catch (err: unknown) {
+      setEmailError(err instanceof Error ? err.message : "Failed to update email.");
+    } finally {
+      setEmailLoading(false);
     }
   };
 
@@ -500,6 +547,68 @@ const Settings = () => {
             value={capitalize(bio_data.next_of_kin_address) || "N/A"}
           />
         </SectionCard>
+
+        {/* Email update — one-time only */}
+        <div className="mt-6">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
+            Email address
+          </p>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Mail size={15} className="text-primary" />
+              <span className="text-sm font-semibold text-gray-700">Update email</span>
+              {userData.email_changed && (
+                <span className="ml-auto text-[10px] font-semibold uppercase tracking-wider bg-gray-100 text-gray-400 px-2 py-0.5 rounded-full">
+                  Used
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mb-4 ml-5.75">
+              {userData.email_changed
+                ? "Your email address has already been updated and cannot be changed again."
+                : "You can update your email address once."}
+            </p>
+
+            {!userData.email_changed && (
+              <>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs font-medium text-gray-500">New email address</label>
+                  <input
+                    type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
+                    placeholder="new@example.com"
+                    disabled={emailLoading}
+                    className="w-full px-3 py-2.5 text-sm rounded-xl border border-gray-200 bg-gray-50 text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition disabled:opacity-50"
+                  />
+                </div>
+
+                {emailError && (
+                  <div className="flex items-center gap-2 mt-3 text-xs text-red-600 bg-red-50 px-3 py-2 rounded-xl">
+                    <AlertCircle size={13} className="shrink-0" />
+                    {emailError}
+                  </div>
+                )}
+
+                {emailSuccess && (
+                  <div className="flex items-center gap-2 mt-3 text-xs text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl">
+                    <CheckCircle2 size={13} className="shrink-0" />
+                    Email updated. Check your new inbox for a confirmation link.
+                  </div>
+                )}
+
+                <button
+                  onClick={handleUpdateEmail}
+                  disabled={emailLoading}
+                  className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-white text-sm font-medium hover:bg-primary/70 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {emailLoading ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} />}
+                  {emailLoading ? "Updating…" : "Update email"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* Security section */}
         <div className="mt-6">

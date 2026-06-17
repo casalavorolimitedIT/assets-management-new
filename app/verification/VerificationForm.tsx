@@ -77,6 +77,7 @@ interface FormValues {
   nextOfKinAddress: string;
   signature: File | null;
   // Step 3
+  skipInvestmentPlan: boolean;
   investmentCompany: string;
   investmentPlan: InvestmentPlan;
   ppInvestmentType: string;
@@ -406,47 +407,50 @@ async function submitVerification(
       : Promise.resolve(""),
   ]);
 
-  const investmentPlanPayload: Record<string, unknown> = {
-    plan: values.investmentPlan,
-    investment_company: values.investmentCompany,
-    ...(values.investmentPlan === "premium_plus" && {
-      amount_figures: values.ppAmountFigures
-        ? Number(values.ppAmountFigures)
-        : null,
-      amount_words: values.ppAmountWords,
-      tenor: values.ppTenor,
-      mode_of_payment: values.ppModeOfPayment,
-      mode_of_interest: values.ppModeOfInterest,
-      monthly_amount_figures: values.ppAmountFigures
-        ? Number(values.ppAmountFigures)
-        : null,
-      monthly_amount_words: values.ppAmountWords,
-      monthly_payment_date: new Date().toISOString().split("T")[0],
-    }),
-    ...(values.investmentPlan === "premium" && {
-      monthly_amount_figures: values.prMonthlyAmountFigures
-        ? Number(values.prMonthlyAmountFigures)
-        : null,
-      monthly_amount_words: values.prMonthlyAmountWords,
-      tenor: values.prTenor,
-      monthly_payment_date: values.prMonthlyPaymentDate,
-    }),
-    ...(values.investmentPlan === "reif" && {
-      units: values.reifUnits ? Number(values.reifUnits) : null,
-      total_figures: values.reifTotalFigures
-        ? Number(values.reifTotalFigures)
-        : null,
-      total_words: values.reifTotalWords,
-      mode_of_payment: values.reifModeOfPayment,
-      mode_of_interest: values.reifModeOfInterest,
-      monthly_amount_figures: values.reifTotalFigures
-        ? Number(values.reifTotalFigures)
-        : null,
-      monthly_amount_words: values.reifTotalWords,
-      tenor: values.reifTenor,
-      monthly_payment_date: new Date().toISOString().split("T")[0],
-    }),
-  };
+  const investmentPlanPayload: Record<string, unknown> | null =
+    values.skipInvestmentPlan
+      ? null
+      : {
+          plan: values.investmentPlan,
+          investment_company: values.investmentCompany,
+          ...(values.investmentPlan === "premium_plus" && {
+            amount_figures: values.ppAmountFigures
+              ? Number(values.ppAmountFigures)
+              : null,
+            amount_words: values.ppAmountWords,
+            tenor: values.ppTenor,
+            mode_of_payment: values.ppModeOfPayment,
+            mode_of_interest: values.ppModeOfInterest,
+            monthly_amount_figures: values.ppAmountFigures
+              ? Number(values.ppAmountFigures)
+              : null,
+            monthly_amount_words: values.ppAmountWords,
+            monthly_payment_date: new Date().toISOString().split("T")[0],
+          }),
+          ...(values.investmentPlan === "premium" && {
+            monthly_amount_figures: values.prMonthlyAmountFigures
+              ? Number(values.prMonthlyAmountFigures)
+              : null,
+            monthly_amount_words: values.prMonthlyAmountWords,
+            tenor: values.prTenor,
+            monthly_payment_date: values.prMonthlyPaymentDate,
+          }),
+          ...(values.investmentPlan === "reif" && {
+            units: values.reifUnits ? Number(values.reifUnits) : null,
+            total_figures: values.reifTotalFigures
+              ? Number(values.reifTotalFigures)
+              : null,
+            total_words: values.reifTotalWords,
+            mode_of_payment: values.reifModeOfPayment,
+            mode_of_interest: values.reifModeOfInterest,
+            monthly_amount_figures: values.reifTotalFigures
+              ? Number(values.reifTotalFigures)
+              : null,
+            monthly_amount_words: values.reifTotalWords,
+            tenor: values.reifTenor,
+            monthly_payment_date: new Date().toISOString().split("T")[0],
+          }),
+        };
 
   const compliance = {
     personal_info: {
@@ -494,12 +498,17 @@ async function submitVerification(
       ? [profile.compliance.investment_plan as Record<string, unknown>]
       : [];
 
-  const updatedCompliance = {
-    ...(profile?.compliance ?? {}),
-    ...compliance,
-    investment_plans: [...existingPlans, investmentPlanPayload],
-    investment_plan: investmentPlanPayload,
-  };
+  const updatedCompliance = investmentPlanPayload
+    ? {
+        ...(profile?.compliance ?? {}),
+        ...compliance,
+        investment_plans: [...existingPlans, investmentPlanPayload],
+        investment_plan: investmentPlanPayload,
+      }
+    : {
+        ...(profile?.compliance ?? {}),
+        ...compliance,
+      };
 
   const { error: updateErr } = await supabase
     .from("profiles")
@@ -512,42 +521,46 @@ async function submitVerification(
 
   if (updateErr) throw new Error(updateErr.message);
 
-  await insertTransaction({
-    user_id: uid,
-    plan: values.investmentPlan,
-    amount:
-      values.investmentPlan === "premium_plus"
-        ? Number(values.ppAmountFigures)
-        : values.investmentPlan === "premium"
-          ? Number(values.prMonthlyAmountFigures)
-          : Number(values.reifTotalFigures),
-    amount_words:
-      values.investmentPlan === "premium_plus"
-        ? values.ppAmountWords
-        : values.investmentPlan === "premium"
-          ? values.prMonthlyAmountWords
-          : values.reifTotalWords,
-    tenor:
-      values.investmentPlan === "premium_plus"
-        ? values.ppTenor
-        : values.investmentPlan === "premium"
-          ? values.prTenor
-          : values.reifTenor,
-    mode_of_payment:
-      values.investmentPlan === "premium_plus"
-        ? values.ppModeOfPayment
-        : values.investmentPlan === "reif"
-          ? values.reifModeOfPayment
+  if (!values.skipInvestmentPlan) {
+    await insertTransaction({
+      user_id: uid,
+      plan: values.investmentPlan,
+      amount:
+        values.investmentPlan === "premium_plus"
+          ? Number(values.ppAmountFigures)
+          : values.investmentPlan === "premium"
+            ? Number(values.prMonthlyAmountFigures)
+            : Number(values.reifTotalFigures),
+      amount_words:
+        values.investmentPlan === "premium_plus"
+          ? values.ppAmountWords
+          : values.investmentPlan === "premium"
+            ? values.prMonthlyAmountWords
+            : values.reifTotalWords,
+      tenor:
+        values.investmentPlan === "premium_plus"
+          ? values.ppTenor
+          : values.investmentPlan === "premium"
+            ? values.prTenor
+            : values.reifTenor,
+      mode_of_payment:
+        values.investmentPlan === "premium_plus"
+          ? values.ppModeOfPayment
+          : values.investmentPlan === "reif"
+            ? values.reifModeOfPayment
+            : undefined,
+      mode_of_interest:
+        values.investmentPlan === "premium_plus"
+          ? values.ppModeOfInterest
+          : values.investmentPlan === "reif"
+            ? values.reifModeOfInterest
+            : undefined,
+      units:
+        values.investmentPlan === "reif"
+          ? Number(values.reifUnits)
           : undefined,
-    mode_of_interest:
-      values.investmentPlan === "premium_plus"
-        ? values.ppModeOfInterest
-        : values.investmentPlan === "reif"
-          ? values.reifModeOfInterest
-          : undefined,
-    units:
-      values.investmentPlan === "reif" ? Number(values.reifUnits) : undefined,
-  });
+    });
+  }
 
   const displayName =
     profile?.first_name?.trim() || user.email?.split("@")[0] || "A user";
@@ -559,20 +572,31 @@ async function submitVerification(
   };
   const planLabel = planLabels[values.investmentPlan] ?? values.investmentPlan;
 
+  const adminMessage = values.skipInvestmentPlan
+    ? `${displayName} has completed verification and skipped the investment plan step.`
+    : `${displayName} has submitted a ${planLabel} investment plan and it is pending review.`;
+  const userMessage = values.skipInvestmentPlan
+    ? "Your account verification is complete. You can add your investment plan later."
+    : `Your ${planLabel} investment plan has been submitted successfully and is pending review.`;
+
   const [{ error: adminNotifErr }, { error: userNotifErr }] = await Promise.all(
     [
       supabase.from("notifications").insert({
         user_id: uid,
-        title: "New Investment Submitted",
-        message: `${displayName} has submitted a ${planLabel} investment plan and it is pending review.`,
+        title: values.skipInvestmentPlan
+          ? "Verification Completed"
+          : "New Investment Submitted",
+        message: adminMessage,
         type: "success",
         read: false,
         forAdmin: true,
       }),
       supabase.from("notifications").insert({
         user_id: uid,
-        title: "Investment Submitted",
-        message: `Your ${planLabel} investment plan has been submitted successfully and is pending review.`,
+        title: values.skipInvestmentPlan
+          ? "Verification Complete"
+          : "Investment Submitted",
+        message: userMessage,
         type: "success",
         read: false,
         forAdmin: false,
@@ -647,6 +671,7 @@ function getStepFields(step: number): (keyof FormValues)[] {
     ];
   if (step === 3)
     return [
+      "skipInvestmentPlan",
       "investmentCompany",
       "investmentPlan",
       "ppInvestmentType",
@@ -716,6 +741,7 @@ function buildInitialValues(
     nextOfKinPhone: "",
     nextOfKinAddress: "",
     signature: null,
+    skipInvestmentPlan: false,
     investmentCompany: "",
     investmentPlan: "",
     ppInvestmentType: "",
@@ -819,6 +845,7 @@ export default function VerificationForm({
   const formik = useFormik<FormValues>({
     initialValues: buildInitialValues(prefillEmail, prefillPhone),
     validate: async (values) => {
+      if (stepRef.current === 3 && values.skipInvestmentPlan) return {};
       try {
         await stepSchemas[stepRef.current - 1].validate(values, {
           abortEarly: false,
@@ -866,6 +893,11 @@ export default function VerificationForm({
   }, [formik.values, verifiedUser]);
 
   const handleNext = async () => {
+    if (step === 3 && formik.values.skipInvestmentPlan) {
+      setAttempted(false);
+      setStep((s) => s + 1);
+      return;
+    }
     setAttempted(true);
     const stepFields = getStepFields(step);
     const touched = stepFields.reduce<Record<string, boolean | boolean[]>>(
@@ -1469,6 +1501,8 @@ function StepThree({ formik, fieldError }: StepProps) {
       },
     ];
 
+  const skipPlan = f.skipInvestmentPlan;
+
   return (
     <div className="space-y-6">
       <StepHeader
@@ -1477,6 +1511,27 @@ function StepThree({ formik, fieldError }: StepProps) {
         description="Choose your preferred investment plan and fill in the details."
       />
 
+      {/* Skip toggle */}
+      <label className="flex items-start gap-3 rounded-xl border border-border bg-muted/20 px-4 py-3.5 cursor-pointer hover:bg-muted/40 transition-colors">
+        <Checkbox
+          checked={skipPlan}
+          onCheckedChange={(checked) => {
+            formik.setFieldValue("skipInvestmentPlan", !!checked, false);
+          }}
+          className="mt-0.5 shrink-0"
+        />
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium leading-none">
+            Skip investment plan for now
+          </p>
+          <p className="text-xs text-muted-foreground">
+            You can fill in your bank details and add an investment plan later.
+          </p>
+        </div>
+      </label>
+
+      {!skipPlan && (
+        <>
       <FieldGroup
         label="Investment Company"
         error={fieldError("investmentCompany")}
@@ -1788,6 +1843,8 @@ function StepThree({ formik, fieldError }: StepProps) {
             </FieldGroup>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

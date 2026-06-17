@@ -105,24 +105,38 @@ interface PayoutEntry {
   payoutAmount: number;
   units: number;
   daysUntil: number;
+  eventType: "upfront" | "monthly" | "maturity";
+  monthNumber?: number;
+  tenorMonths?: number;
 }
 
-function getUpcomingPayouts(
-  users: UserProfile[],
-  withinDays = 60,
-): PayoutEntry[] {
+function parseTenorToMonths(tenor: string): number {
+  if (!tenor) return 0;
+  const match = tenor.match(/(\d+)\s*(?:Month|month)/);
+  if (match) return parseInt(match[1]);
+  const months = parseInt(tenor);
+  return isNaN(months) ? 0 : months;
+}
+
+function addMonthsClamped(date: Date, months: number): Date {
+  const d = new Date(date);
+  const targetMonth = d.getMonth() + months;
+  d.setDate(1);
+  d.setMonth(targetMonth);
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(date.getDate(), lastDay));
+  return d;
+}
+
+function getUpcomingPayouts(users: UserProfile[]): PayoutEntry[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const results: PayoutEntry[] = [];
 
-  const parseTenorToMonths = (tenor: string): number => {
-    if (!tenor) return 0;
-    const match = tenor.match(/(\d+)\s*(?:Month|month)/);
-    if (match) {
-      return parseInt(match[1]);
-    }
-    const months = parseInt(tenor);
-    return isNaN(months) ? 0 : months;
+  const PLAN_RATES: Record<string, number> = {
+    premium_plus: 0.12,
+    premium: 0.2,
+    reif: 0.22,
   };
 
   for (const user of users) {
@@ -144,67 +158,82 @@ function getUpcomingPayouts(
       (compliance.investment_plan ? [compliance.investment_plan] : []);
 
     for (const plan of plans) {
-      if (!plan.monthly_payment_date) {
-        console.log(`No monthly_payment_date for ${user.first_name}`);
-        continue;
-      }
+      if (!plan.monthly_payment_date) continue;
 
       const startDate = new Date(plan.monthly_payment_date);
-      if (isNaN(startDate.getTime())) {
-        console.log(
-          `Invalid start date for ${user.first_name}: ${plan.monthly_payment_date}`,
-        );
-        continue;
-      }
+      if (isNaN(startDate.getTime())) continue;
 
-      const monthsToAdd = parseTenorToMonths(plan.tenor);
-      if (monthsToAdd === 0) {
-        console.log(
-          `Could not parse tenor for ${user.first_name}: ${plan.tenor}`,
-        );
-        continue;
-      }
-
-      const payoutDate = new Date(startDate);
-      payoutDate.setMonth(payoutDate.getMonth() + monthsToAdd);
-
-      const daysUntil = Math.round(
-        (payoutDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      // Only include future payouts within the specified range
-      if (daysUntil < 0 || daysUntil > withinDays) continue;
-
-      const principal = plan.total_figures ?? plan.monthly_amount_figures ?? 0;
+      const tenorMonths = parseTenorToMonths(plan.tenor);
+      if (!tenorMonths) continue;
 
       const planKey = plan.plan?.toLowerCase();
-      const PLAN_RATES: Record<string, number> = {
-        premium_plus: 0.12,
-        premium: 0.2,
-        reif: 0.22,
-      };
       const rate =
         (plan.custom_rate as number | undefined) ?? PLAN_RATES[planKey] ?? 0.15;
+      const principal =
+        plan.total_figures ?? plan.monthly_amount_figures ?? plan.amount_figures ?? 0;
+      const totalInterest = principal * rate;
 
-      const expectedReturns = principal * rate;
-
-      const payoutAmount =
-        plan.payout_amount ?? plan.returns ?? expectedReturns;
-
-      results.push({
+      const base = {
         name: `${user.title ?? ""} ${user.first_name} ${user.last_name}`.trim(),
         email: user.email,
         phone: user.phone,
         planName: plan.plan?.toUpperCase() ?? "Investment Plan",
-        payoutDate: payoutDate.toISOString(),
-        payoutAmount: payoutAmount,
         units: plan.units ?? 0,
-        daysUntil,
-      });
+        tenorMonths,
+      };
+
+      const mode: string = plan.mode_of_interest ?? "";
+
+      if (mode === "Upfront") {
+        if (startDate >= today) {
+          const daysUntil = Math.round(
+            (startDate.getTime() - today.getTime()) / 86_400_000,
+          );
+          results.push({
+            ...base,
+            payoutDate: startDate.toISOString(),
+            payoutAmount: totalInterest,
+            daysUntil,
+            eventType: "upfront",
+          });
+        }
+      } else if (mode === "Monthly") {
+        const monthlyAmount = totalInterest / tenorMonths;
+        for (let m = 1; m <= tenorMonths; m++) {
+          const installmentDate = addMonthsClamped(startDate, m);
+          if (installmentDate < today) continue;
+          const daysUntil = Math.round(
+            (installmentDate.getTime() - today.getTime()) / 86_400_000,
+          );
+          results.push({
+            ...base,
+            payoutDate: installmentDate.toISOString(),
+            payoutAmount: monthlyAmount,
+            daysUntil,
+            eventType: "monthly",
+            monthNumber: m,
+          });
+          break; // only the next installment per plan
+        }
+      } else {
+        // End of Tenor (default)
+        const maturityDate = addMonthsClamped(startDate, tenorMonths);
+        if (maturityDate >= today) {
+          const daysUntil = Math.round(
+            (maturityDate.getTime() - today.getTime()) / 86_400_000,
+          );
+          results.push({
+            ...base,
+            payoutDate: maturityDate.toISOString(),
+            payoutAmount: totalInterest,
+            daysUntil,
+            eventType: "maturity",
+          });
+        }
+      }
     }
   }
 
-  // Sort by closest payout first
   return results.sort((a, b) => a.daysUntil - b.daysUntil);
 }
 
@@ -290,88 +319,93 @@ const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
   );
 };
 
-const UpcomingPayouts = ({ users }: { users: UserProfile[] }) => {
-  const payouts = getUpcomingPayouts(users, 30);
+const EVENT_LABEL: Record<string, string> = {
+  upfront: "Upfront Interest",
+  monthly: "Monthly Installment",
+  maturity: "Maturity Payout",
+};
 
-  if (payouts.length === 0)
+const UpcomingPayouts = ({ users }: { users: UserProfile[] }) => {
+  const allPayouts = getUpcomingPayouts(users);
+
+  if (allPayouts.length === 0)
     return (
       <div className="flex flex-col h-full">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
           Upcoming Payouts
         </p>
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm text-center flex-1 flex flex-col items-center justify-center">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm text-center flex-1 flex flex-col items-center justify-center px-4 py-6">
           <CalendarClock size={22} className="text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-400">
-            No payouts in the next 30 days
-          </p>
+          <p className="text-sm text-gray-400">No upcoming payouts found</p>
         </div>
       </div>
     );
 
+  const next = allPayouts[0];
+  const sameDay = allPayouts.filter((p) => p.daysUntil === next.daysUntil).length - 1;
+
   return (
     <div className="flex flex-col h-full">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
-        Payouts{" "}
-        <span className="normal-case font-normal">({payouts.length})</span>
+        Upcoming Payouts
       </p>
-      <div className="space-y-2">
-        {payouts.map((p, i) => (
+
+      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+        <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider mb-2">
+          Next payout
+        </p>
+        <div className="flex items-start gap-3">
           <div
-            key={i}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3"
+            className={`shrink-0 w-12 h-12 rounded-xl flex flex-col items-center justify-center font-bold ${
+              next.daysUntil === 0
+                ? "bg-emerald-500 text-white"
+                : next.daysUntil <= 7
+                  ? "bg-orange-100 text-orange-600"
+                  : "bg-sky-100 text-sky-600"
+            }`}
           >
-            <div
-              className={`shrink-0 w-11 h-11 rounded-xl flex flex-col items-center justify-center font-bold ${
-                p.daysUntil === 0
-                  ? "bg-emerald-100 text-emerald-600"
-                  : p.daysUntil <= 7
-                    ? "bg-orange-50 text-orange-600"
-                    : "bg-sky-50 text-sky-600"
-              }`}
-            >
-              {p.daysUntil === 0 ? (
-                <TrendingUp size={18} />
-              ) : (
-                <>
-                  <span className="text-base leading-none">{p.daysUntil}</span>
-                  <span className="text-[9px] font-medium opacity-70">
-                    days
-                  </span>
-                </>
+            {next.daysUntil === 0 ? (
+              <TrendingUp size={18} />
+            ) : (
+              <>
+                <span className="text-base leading-none">{next.daysUntil}</span>
+                <span className="text-[9px] font-medium opacity-70">days</span>
+              </>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-bold text-gray-900 truncate">
+                {next.name}
+              </p>
+              {sameDay > 0 && (
+                <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full shrink-0">
+                  +{sameDay} more
+                </span>
               )}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <p className="text-xs font-semibold text-gray-900 truncate">
-                  {p.name}
-                </p>
-                {p.daysUntil === 0 && (
-                  <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full shrink-0">
-                    Due today!
-                  </span>
-                )}
-              </div>
-              <p className="text-[10px] text-gray-400 truncate">{p.planName}</p>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[10px] font-semibold text-emerald-600">
-                  {currency(p.payoutAmount)}
-                </span>
-                <span className="text-[10px] text-gray-300">·</span>
-                <span className="text-[10px] text-gray-500">
-                  {formatPayoutDate(p.payoutDate)}
-                </span>
-                {p.units > 0 && (
-                  <>
-                    <span className="text-[10px] text-gray-300">·</span>
-                    <span className="text-[10px] text-gray-500">
-                      {p.units} units
-                    </span>
-                  </>
-                )}
-              </div>
+            <p className="text-[10px] text-gray-500 mt-0.5">
+              {next.planName} · {EVENT_LABEL[next.eventType] ?? next.eventType}
+              {next.eventType === "monthly" &&
+                next.monthNumber !== undefined &&
+                next.tenorMonths !== undefined &&
+                ` (${next.monthNumber}/${next.tenorMonths})`}
+            </p>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm font-bold text-emerald-600">
+                {currency(next.payoutAmount)}
+              </span>
+              <span className="text-[10px] text-gray-400">
+                {formatPayoutDate(next.payoutDate)}
+              </span>
             </div>
+            {next.daysUntil === 0 && (
+              <span className="mt-1 inline-block text-[10px] font-semibold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                Due today!
+              </span>
+            )}
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );

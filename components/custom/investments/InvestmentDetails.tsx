@@ -27,6 +27,7 @@ export interface InvestmentPlan {
   monthly_amount_words: string;
   monthly_payment_date: string;
   monthly_amount_figures: number;
+  investment_company?: string;
 }
 
 export interface BankDetails {
@@ -156,6 +157,8 @@ export default function InvestmentDetails() {
               (get("amount_figures") as number) ??
               (get("total_figures") as number) ??
               0,
+            investment_company:
+              (get("investment_company") as string) ?? undefined,
           };
         };
 
@@ -283,6 +286,11 @@ export default function InvestmentDetails() {
                             {plan.plan.replace(/_/g, " ")} Plan
                           </span>
                         </div>
+                        {plan.investment_company && (
+                          <span className="flex items-center gap-1 rounded-full bg-white/20 px-2.5 py-0.5 text-[10px] font-semibold text-white/90 backdrop-blur-sm">
+                            {plan.investment_company}
+                          </span>
+                        )}
                         <div className="flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 backdrop-blur-sm">
                           <BadgeCheck className="size-3.5" />
                           <span className="text-xs font-semibold">Active</span>

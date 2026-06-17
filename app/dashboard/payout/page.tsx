@@ -828,6 +828,12 @@ export default function PayoutSchedulePage() {
                         PLAN_LABELS[selected.plan.plan] ?? selected.plan.plan
                       }
                     />
+                    {selected.plan.investment_company && (
+                      <DetailRow
+                        label="Investment company"
+                        value={selected.plan.investment_company}
+                      />
+                    )}
                     <DetailRow label="Tenor" value={selected.plan.tenor} />
                     <DetailRow
                       label="Principal"

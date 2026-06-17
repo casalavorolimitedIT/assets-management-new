@@ -23,8 +23,11 @@ import {
   BarChart3,
   Layers,
   Loader2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { login, LoginValues } from "@/hooks/auth";
+import { useState } from "react";
 
 const validationSchema = Yup.object({
   email: Yup.string()
@@ -35,6 +38,7 @@ const validationSchema = Yup.object({
 
 export default function LoginPage() {
   const router = useRouter();
+  const [showPassword, setShowPassword] = useState(false);
 
   const formik = useFormik<LoginValues>({
     initialValues: {
@@ -245,13 +249,24 @@ export default function LoginPage() {
                       Forgot password?
                     </Link>
                   </div>
-                  <Input
-                    {...fieldProps("password")}
-                    type="password"
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    className={`h-10 text-sm ${inputCls("password")}`}
-                  />
+                  <div className="relative">
+                    <Input
+                      {...fieldProps("password")}
+                      type={showPassword ? "text" : "password"}
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      className={`h-10 text-sm pr-10 ${inputCls("password")}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      tabIndex={-1}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
                   <ErrorMsg name="password" />
                 </div>
 

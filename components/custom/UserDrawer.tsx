@@ -162,6 +162,11 @@ export const UserDrawer = ({
                     </span>
                     <span className="text-xs text-gray-500">{plan.tenor}</span>
                   </div>
+                  {plan.investment_company && (
+                    <p className="text-xs font-medium text-[#ff6900] mb-1">
+                      {plan.investment_company}
+                    </p>
+                  )}
                   <p className="text-base font-bold text-gray-900">
                     {currency(plan.total_figures)}
                   </p>

@@ -35,6 +35,7 @@ interface InvestmentPlan {
   mode_of_interest?: string;
   units?: number;
   custom_rate?: number;
+  investment_company?: string;
 }
 
 const PLAN_META: Record<
@@ -344,6 +345,10 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
         {expanded && (
           <div className="mt-2 space-y-2 border-t border-zinc-100 pt-3">
             {[
+              inv.investment_company && {
+                label: "Investment Company",
+                value: inv.investment_company,
+              },
               {
                 label: "Payment Date",
                 value: new Date(inv.monthly_payment_date).toLocaleDateString(

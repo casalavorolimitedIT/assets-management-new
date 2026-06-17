@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
@@ -30,6 +31,8 @@ import {
   BarChart3,
   Layers,
   Loader2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { register, RegisterValues } from "@/hooks/auth";
 
@@ -61,6 +64,7 @@ const validationSchema = Yup.object({
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [showPassword, setShowPassword] = React.useState(false);
 
   const formik = useFormik<RegisterValues>({
     initialValues: {
@@ -385,13 +389,24 @@ export default function RegisterPage() {
                   >
                     Password
                   </Label>
-                  <Input
-                    {...fieldProps("password")}
-                    type="password"
-                    placeholder="Min. 8 chars, 1 uppercase, 1 number"
-                    autoComplete="new-password"
-                    className={`h-10 text-sm ${inputCls("password")}`}
-                  />
+                  <div className="relative">
+                    <Input
+                      {...fieldProps("password")}
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Min. 8 chars, 1 uppercase, 1 number"
+                      autoComplete="new-password"
+                      className={`h-10 text-sm pr-10 ${inputCls("password")}`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                      tabIndex={-1}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </button>
+                  </div>
                   <ErrorMsg name="password" />
                 </div>
 

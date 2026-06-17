@@ -724,6 +724,11 @@ export default function InvestmentDetailsAdmin() {
                                   <p className="text-sm font-semibold text-zinc-950">
                                     {PLAN_LABELS[plan.plan] ?? plan.plan}
                                   </p>
+                                  {plan.investment_company && (
+                                    <p className="mt-0.5 text-xs font-medium text-[#ff6900]">
+                                      {plan.investment_company}
+                                    </p>
+                                  )}
                                   <p className="mt-1 text-xs text-zinc-500">
                                     {plan.tenor ?? "No tenor"} ·{" "}
                                     {plan.mode_of_payment ?? "No payment mode"}

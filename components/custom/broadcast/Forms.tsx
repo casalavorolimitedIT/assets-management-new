@@ -18,21 +18,14 @@ const supabase = createClient();
 
 type TxType = "payout" | "debit";
 
-interface Transaction {
-  id: string;
+interface PlanOption {
+  index: number;
   plan: string;
-  type: string;
-  description: string;
-  amount: string;
-  amount_words: string;
   tenor: string | null;
-  status: string;
-  created_at: string;
-}
-
-interface DebitTransaction extends Transaction {
+  investment_company: string;
+  mode_of_interest: string;
   monthly_amount_figures: number;
-  monthly_amount_words?: string;
+  monthly_amount_words: string;
 }
 
 type MutableInvestmentPlan = Partial<InvestmentPlan> & {
@@ -149,9 +142,6 @@ function getInvestmentPlans(compliance: unknown): InvestmentPlan[] {
   return parsed?.investment_plan ? [parsed.investment_plan] : [];
 }
 
-function getMonthlyPlanAmount(plan?: Partial<InvestmentPlan> | null) {
-  return Number(plan?.monthly_amount_figures ?? 0) || 0;
-}
 
 function Field({
   label,
@@ -404,9 +394,9 @@ function DebitForm({
   onSuccess: (message: string) => void;
   onError: (message: string) => void;
 }) {
-  const [transactions, setTransactions] = useState<DebitTransaction[]>([]);
+  const [plans, setPlans] = useState<PlanOption[]>([]);
   const [loadingTx, setLoadingTx] = useState(false);
-  const [selectedTx, setSelectedTx] = useState<DebitTransaction | null>(null);
+  const [selectedPlan, setSelectedPlan] = useState<PlanOption | null>(null);
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
   const [amountWords, setAmountWords] = useState("");
@@ -415,62 +405,51 @@ function DebitForm({
 
   const user = selectedUsers[0];
   const amountNum = parseFloat(amount.replace(/,/g, "")) || 0;
-  const selectedBalance = selectedTx?.monthly_amount_figures ?? 0;
+  const selectedBalance = selectedPlan?.monthly_amount_figures ?? 0;
   const isValid =
-    selectedTx !== null &&
+    selectedPlan !== null &&
     description.trim() !== "" &&
     amountNum > 0 &&
     amountNum <= selectedBalance &&
     amountWords.trim() !== "";
 
+  // Load investment plans directly from the user's compliance data
   useEffect(() => {
     if (!user) return;
-    setSelectedTx(null);
-    setTransactions([]);
+    setSelectedPlan(null);
+    setPlans([]);
     setLoadingTx(true);
 
-    Promise.all([
-      supabase
-        .from("transactions")
-        .select(
-          "id, plan, type, description, amount, amount_words, tenor, status, created_at",
-        )
-        .eq("user_id", user.id)
-        .eq("type", "investment")
-        .eq("status", "active")
-        .order("created_at", { ascending: false }),
-      supabase.from("profiles").select("compliance").eq("id", user.id).single(),
-    ])
-      .then(([{ data: txData, error: txError }, { data: profileData }]) => {
-        if (!txError && txData) {
-          const plansByName = new Map(
-            getInvestmentPlans(profileData?.compliance).map((plan) => [
-              plan.plan,
-              plan,
-            ]),
+    (async () => {
+      try {
+        const { data: profileData, error } = await supabase
+          .from("profiles")
+          .select("compliance")
+          .eq("id", user.id)
+          .single();
+
+        if (!error && profileData) {
+          const investmentPlans = getInvestmentPlans(profileData.compliance);
+          setPlans(
+            investmentPlans.map((p, index) => ({
+              index,
+              plan: p.plan ?? "",
+              tenor: p.tenor ?? null,
+              investment_company: p.investment_company ?? "",
+              mode_of_interest: p.mode_of_interest ?? "",
+              monthly_amount_figures: Number(p.monthly_amount_figures ?? 0),
+              monthly_amount_words: p.monthly_amount_words ?? "",
+            })),
           );
-          const rows = (txData as Transaction[]).map((tx) => {
-            const plan = plansByName.get(tx.plan);
-            const monthlyAmount = getMonthlyPlanAmount(plan);
-
-            return {
-              ...tx,
-              monthly_amount_figures: monthlyAmount,
-              monthly_amount_words: plan?.monthly_amount_words,
-            };
-          });
-
-          setTransactions(rows);
         }
+      } finally {
         setLoadingTx(false);
-      })
-      .catch(() => {
-        setLoadingTx(false);
-      });
+      }
+    })();
   }, [user]);
 
   const handleSend = async () => {
-    if (!isValid || !user || !selectedTx) return;
+    if (!isValid || !user || !selectedPlan) return;
     setSending(true);
 
     try {
@@ -487,66 +466,31 @@ function DebitForm({
 
       const compliance = structuredClone(profile?.compliance ?? {}) as any;
 
+      // Update by index so we handle users with multiple plans of the same type
       if (Array.isArray(compliance.investment_plans)) {
         compliance.investment_plans = compliance.investment_plans
-          .map((p: any) => {
-            if (p.plan !== selectedTx.plan) return p;
-            if (p.monthly_amount_figures !== undefined) {
-              const current = parseFloat(String(p.monthly_amount_figures)) || 0;
-              const remaining = Math.max(0, current - amountNum);
-              if (remaining === 0) return null;
-              return {
-                ...p,
-                monthly_amount_figures: remaining,
-              };
-            }
-            if (p.total_figures !== undefined) {
-              const current = parseFloat(String(p.total_figures)) || 0;
-              const remaining = Math.max(0, current - amountNum);
-              if (remaining === 0) return null;
-              return { ...p, total_figures: remaining };
-            }
-            return p;
+          .map((p: any, i: number) => {
+            if (i !== selectedPlan.index) return p;
+            const current =
+              parseFloat(String(p.monthly_amount_figures ?? p.amount_figures ?? 0)) || 0;
+            const remaining = Math.max(0, current - amountNum);
+            if (remaining === 0) return null;
+            return {
+              ...p,
+              ...(p.monthly_amount_figures !== undefined
+                ? { monthly_amount_figures: remaining }
+                : { amount_figures: remaining }),
+            };
           })
           .filter((p: any): p is MutableInvestmentPlan => p !== null);
-      }
 
-      if (
-        compliance.investment_plan &&
-        compliance.investment_plan.plan === selectedTx.plan
-      ) {
-        const ip = compliance.investment_plan;
-        if (ip.monthly_amount_figures !== undefined) {
-          const current = parseFloat(String(ip.monthly_amount_figures)) || 0;
-          const remaining = Math.max(0, current - amountNum);
-          if (remaining === 0) {
-            const nextPlan = compliance.investment_plans?.[0];
-            if (nextPlan) {
-              compliance.investment_plan = nextPlan;
-            } else {
-              delete compliance.investment_plan;
-            }
+        // Keep investment_plan (primary pointer) in sync
+        if (compliance.investment_plan?.plan === selectedPlan.plan) {
+          const updated = compliance.investment_plans[0];
+          if (updated) {
+            compliance.investment_plan = updated;
           } else {
-            compliance.investment_plan = {
-              ...ip,
-              monthly_amount_figures: remaining,
-            };
-          }
-        } else if (ip.amount_figures !== undefined) {
-          const current = parseFloat(String(ip.amount_figures)) || 0;
-          const remaining = Math.max(0, current - amountNum);
-          if (remaining === 0) {
-            const nextPlan = compliance.investment_plans?.[0];
-            if (nextPlan) {
-              compliance.investment_plan = nextPlan;
-            } else {
-              delete compliance.investment_plan;
-            }
-          } else {
-            compliance.investment_plan = {
-              ...ip,
-              amount_figures: remaining,
-            };
+            delete compliance.investment_plan;
           }
         }
       }
@@ -561,7 +505,7 @@ function DebitForm({
 
       const { error: txError } = await supabase.from("transactions").insert({
         user_id: user.id,
-        plan: selectedTx.plan,
+        plan: selectedPlan.plan,
         type: "debit",
         description: description.trim(),
         amount: amountNum.toFixed(2),
@@ -579,7 +523,7 @@ function DebitForm({
         .insert({
           user_id: user.id,
           title: "Account Debit",
-          message: `An amount of ${amountWords.trim()} (₦${amountNum.toLocaleString()}) has been debited from your ${selectedTx.plan} principal. ${description.trim()}`,
+          message: `An amount of ${amountWords.trim()} (₦${amountNum.toLocaleString()}) has been debited from your ${selectedPlan.plan} principal. ${description.trim()}`,
           type: "warning",
           read: false,
           forAdmin: false,
@@ -589,17 +533,16 @@ function DebitForm({
       if (notifError)
         throw new Error(`Notification failed: ${notifError.message}`);
 
-      // Fire email — non-blocking, failures are logged but don't abort the debit
       void sendTransactionEmail({
         user,
         subject: "Account Debit Notice",
         title: "Account Debit",
-        preheader: `${amountWords.trim()} has been debited from your ${selectedTx.plan} plan.`,
+        preheader: `${amountWords.trim()} has been debited from your ${selectedPlan.plan} plan.`,
         bodyHtml: `
           <p style="margin:0 0 16px;">Hi ${user.first_name},</p>
           <p style="margin:0 0 16px;">An amount has been debited from your investment account. Please review the details below.</p>
           ${summaryTable([
-            ["Plan", planLabel(selectedTx.plan)],
+            ["Plan", planLabel(selectedPlan.plan)],
             ["Amount Debited", fmt(amountNum)],
             ["Amount in Words", amountWords.trim()],
             ["Description", description.trim()],
@@ -616,19 +559,15 @@ function DebitForm({
       setDescription("");
       setAmount("");
       setAmountWords("");
-      setSelectedTx(null);
-      setTransactions((current) =>
-        current.map((tx) =>
-          tx.id === selectedTx.id
-            ? {
-                ...tx,
-                monthly_amount_figures: Math.max(
-                  0,
-                  tx.monthly_amount_figures - amountNum,
-                ),
-              }
-            : tx,
-        ),
+      setSelectedPlan(null);
+      setPlans((current) =>
+        current
+          .map((p) =>
+            p.index === selectedPlan.index
+              ? { ...p, monthly_amount_figures: Math.max(0, p.monthly_amount_figures - amountNum) }
+              : p,
+          )
+          .filter((p) => p.monthly_amount_figures > 0),
       );
     } catch (err) {
       onError(err instanceof Error ? err.message : "Debit failed");
@@ -658,7 +597,7 @@ function DebitForm({
         </div>
       </div>
 
-      {/* Transaction picker */}
+      {/* Plan picker — reads from compliance, not transactions */}
       <div className="space-y-1.5">
         <p className="text-sm font-medium text-slate-700">
           Select plan to debit from
@@ -667,32 +606,29 @@ function DebitForm({
         {loadingTx ? (
           <div className="space-y-2">
             {[1, 2].map((i) => (
-              <div
-                key={i}
-                className="h-16 rounded-lg bg-slate-100 animate-pulse"
-              />
+              <div key={i} className="h-16 rounded-lg bg-slate-100 animate-pulse" />
             ))}
           </div>
-        ) : transactions.length === 0 ? (
+        ) : plans.length === 0 ? (
           <div className="flex gap-2 items-start text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-3 py-3">
             <AlertTriangle
               className="w-3.5 h-3.5 shrink-0 mt-0.5 text-slate-400"
               aria-hidden="true"
             />
-            No active investment transactions found for this user.
+            No investment plans found for this user.
           </div>
         ) : (
           <div className="space-y-2">
-            {transactions.map((tx) => {
-              const isActive = selectedTx?.id === tx.id;
-              const isEmpty = tx.monthly_amount_figures <= 0;
+            {plans.map((plan) => {
+              const isActive = selectedPlan?.index === plan.index;
+              const isEmpty = plan.monthly_amount_figures <= 0;
               return (
                 <button
-                  key={tx.id}
+                  key={plan.index}
                   type="button"
                   onClick={() => {
                     if (isEmpty) return;
-                    setSelectedTx(isActive ? null : tx);
+                    setSelectedPlan(isActive ? null : plan);
                   }}
                   disabled={isEmpty}
                   className={`w-full text-left px-3.5 py-3 rounded-lg border transition
@@ -708,21 +644,22 @@ function DebitForm({
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <p className="text-xs font-semibold uppercase tracking-wide truncate">
-                        {tx.plan ?? "—"}
+                        {planLabel(plan.plan)}
+                        {plan.investment_company ? ` · ${plan.investment_company}` : ""}
                       </p>
                       <p className="text-xs opacity-60 mt-0.5 truncate">
-                        {tx.description}
-                        {tx.tenor ? ` · ${tx.tenor}` : ""}
+                        {plan.tenor}
+                        {plan.mode_of_interest ? ` · ${plan.mode_of_interest}` : ""}
                       </p>
                     </div>
                     <div className="text-right shrink-0">
                       <p className="text-sm font-semibold">
                         {isEmpty
                           ? "Empty"
-                          : `₦${tx.monthly_amount_figures.toLocaleString()}`}
+                          : `₦${plan.monthly_amount_figures.toLocaleString()}`}
                       </p>
                       <p className="text-[10px] opacity-50">
-                        {tx.monthly_amount_words ?? tx.amount_words}
+                        {plan.monthly_amount_words}
                       </p>
                     </div>
                   </div>
@@ -733,7 +670,7 @@ function DebitForm({
         )}
       </div>
 
-      {selectedTx && (
+      {selectedPlan && (
         <>
           <Field label="Description" id="debit-description">
             <input
@@ -782,8 +719,8 @@ function DebitForm({
                 aria-hidden="true"
               />
               ₦{amountNum.toLocaleString()} will be subtracted from the{" "}
-              <span className="font-semibold">{selectedTx.plan}</span> plan in
-              this user&apos;s compliance record.
+              <span className="font-semibold">{planLabel(selectedPlan.plan)}</span>{" "}
+              plan in this user&apos;s compliance record.
             </div>
           )}
 
@@ -811,7 +748,7 @@ function DebitForm({
                 <p className="text-xs opacity-75 mt-0.5">
                   An amount of {amountWords || "—"} (₦
                   {amountNum.toLocaleString()}) has been debited from your{" "}
-                  {selectedTx.plan} principal. {description}
+                  {selectedPlan.plan} principal. {description}
                 </p>
               </div>
             </div>

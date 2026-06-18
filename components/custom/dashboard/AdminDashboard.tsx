@@ -40,10 +40,7 @@ interface BirthdayEntry {
   turningAge: number;
 }
 
-function getUpcomingBirthdays(
-  users: UserProfile[],
-  withinDays = 30,
-): BirthdayEntry[] {
+function buildBirthdayEntries(users: UserProfile[]): BirthdayEntry[] {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const results: BirthdayEntry[] = [];
@@ -75,8 +72,6 @@ function getUpcomingBirthdays(
     const daysUntil = Math.round(
       (nextBirthday.getTime() - today.getTime()) / (1000 * 60 * 60 * 24),
     );
-    if (daysUntil > withinDays) continue;
-
     const turningAge = nextBirthday.getFullYear() - dobDate.getFullYear();
     results.push({
       name: `${user.title ?? ""} ${user.first_name} ${user.last_name}`.trim(),
@@ -89,6 +84,13 @@ function getUpcomingBirthdays(
   }
 
   return results.sort((a, b) => a.daysUntil - b.daysUntil);
+}
+
+function getUpcomingBirthdays(
+  users: UserProfile[],
+  withinDays = 30,
+): BirthdayEntry[] {
+  return buildBirthdayEntries(users).filter((b) => b.daysUntil <= withinDays);
 }
 
 function formatBirthdayDate(dob: string): string {
@@ -247,9 +249,16 @@ function formatPayoutDate(dateStr: string): string {
 }
 
 const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
-  const birthdays = getUpcomingBirthdays(users, 30);
+  const all = buildBirthdayEntries(users);
+  const next = all[0] ?? null;
+  const within30 = all.filter((b) => b.daysUntil <= 30);
+  // list shown below the highlight card — exclude the next birthday if it's already featured
+  const rest = within30.filter((_, i) => i !== 0);
+  const sameDayAsNext = next
+    ? within30.filter((b) => b.daysUntil === next.daysUntil).length - 1
+    : 0;
 
-  if (birthdays.length === 0)
+  if (!next)
     return (
       <div className="flex flex-col h-full">
         <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
@@ -257,9 +266,7 @@ const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
         </p>
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-4 py-6 text-center flex-1 flex flex-col items-center justify-center">
           <Cake size={22} className="text-gray-300 mx-auto mb-2" />
-          <p className="text-sm text-gray-400">
-            No birthdays in the next 30 days
-          </p>
+          <p className="text-sm text-gray-400">No birthday data available</p>
         </div>
       </div>
     );
@@ -267,54 +274,105 @@ const UpcomingBirthdays = ({ users }: { users: UserProfile[] }) => {
   return (
     <div className="flex flex-col h-full">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">
-        Birthdays{" "}
-        <span className="normal-case font-normal">({birthdays.length})</span>
+        Birthdays
+        {within30.length > 0 && (
+          <span className="normal-case font-normal"> ({within30.length} this month)</span>
+        )}
       </p>
-      <div className="space-y-2">
-        {birthdays.map((b, i) => (
+
+      {/* Next birthday highlight — mirrors the UpcomingPayouts "Next payout" card */}
+      <div className="bg-pink-50 border border-pink-100 rounded-2xl p-4 mb-3">
+        <p className="text-[10px] font-semibold text-pink-600 uppercase tracking-wider mb-2">
+          Next birthday
+        </p>
+        <div className="flex items-start gap-3">
           <div
-            key={i}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3"
+            className={`shrink-0 w-12 h-12 rounded-xl flex flex-col items-center justify-center font-bold ${
+              next.daysUntil === 0
+                ? "bg-pink-500 text-white"
+                : next.daysUntil <= 7
+                  ? "bg-amber-100 text-amber-600"
+                  : "bg-violet-100 text-violet-600"
+            }`}
           >
-            <div
-              className={`shrink-0 w-11 h-11 rounded-xl flex flex-col items-center justify-center font-bold ${
-                b.daysUntil === 0
-                  ? "bg-pink-100 text-pink-600"
-                  : b.daysUntil <= 7
-                    ? "bg-amber-50 text-amber-600"
-                    : "bg-violet-50 text-violet-600"
-              }`}
-            >
-              {b.daysUntil === 0 ? (
-                <Cake size={18} />
-              ) : (
-                <>
-                  <span className="text-base leading-none">{b.daysUntil}</span>
-                  <span className="text-[9px] font-medium opacity-70">
-                    days
-                  </span>
-                </>
+            {next.daysUntil === 0 ? (
+              <Cake size={18} />
+            ) : (
+              <>
+                <span className="text-base leading-none">{next.daysUntil}</span>
+                <span className="text-[9px] font-medium opacity-70">days</span>
+              </>
+            )}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-bold text-gray-900 truncate">
+                {next.name}
+              </p>
+              {sameDayAsNext > 0 && (
+                <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full shrink-0">
+                  +{sameDayAsNext} more
+                </span>
               )}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <p className="text-xs font-semibold text-gray-900 truncate">
-                  {b.name}
-                </p>
-                {b.daysUntil === 0 && (
-                  <span className="text-[10px] font-medium text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded-full shrink-0">
-                    Today! 🎂
-                  </span>
+            <p className="text-[10px] text-gray-500 mt-0.5">
+              {formatBirthdayDate(next.dob)} · Turning {next.turningAge}
+            </p>
+            {next.daysUntil === 0 && (
+              <span className="mt-1 inline-block text-[10px] font-semibold text-pink-600 bg-pink-100 px-1.5 py-0.5 rounded-full">
+                Today! 🎂
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Remaining birthdays within 30 days */}
+      {rest.length > 0 && (
+        <div className="space-y-2">
+          {rest.map((b, i) => (
+            <div
+              key={i}
+              className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-3"
+            >
+              <div
+                className={`shrink-0 w-11 h-11 rounded-xl flex flex-col items-center justify-center font-bold ${
+                  b.daysUntil === 0
+                    ? "bg-pink-100 text-pink-600"
+                    : b.daysUntil <= 7
+                      ? "bg-amber-50 text-amber-600"
+                      : "bg-violet-50 text-violet-600"
+                }`}
+              >
+                {b.daysUntil === 0 ? (
+                  <Cake size={18} />
+                ) : (
+                  <>
+                    <span className="text-base leading-none">{b.daysUntil}</span>
+                    <span className="text-[9px] font-medium opacity-70">days</span>
+                  </>
                 )}
               </div>
-              <p className="text-[10px] text-gray-400 truncate">{b.email}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">
-                {formatBirthdayDate(b.dob)} · Turning {b.turningAge}
-              </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <p className="text-xs font-semibold text-gray-900 truncate">
+                    {b.name}
+                  </p>
+                  {b.daysUntil === 0 && (
+                    <span className="text-[10px] font-medium text-pink-600 bg-pink-50 px-1.5 py-0.5 rounded-full shrink-0">
+                      Today! 🎂
+                    </span>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-400 truncate">{b.email}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">
+                  {formatBirthdayDate(b.dob)} · Turning {b.turningAge}
+                </p>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

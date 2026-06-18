@@ -609,6 +609,37 @@ async function submitVerification(
   if (userNotifErr)
     console.error("Failed to send user notification:", userNotifErr.message);
 
+  // Send email to all admins
+  try {
+    const { data: adminProfiles } = await supabase
+      .from("profiles")
+      .select("email, first_name")
+      .eq("role", "ADMIN");
+
+    if (adminProfiles && adminProfiles.length > 0) {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: values.skipInvestmentPlan
+            ? `Verification Completed — ${displayName}`
+            : `New ${planLabel} Plan Submitted — ${displayName}`,
+          title: values.skipInvestmentPlan
+            ? "Verification Completed"
+            : "New Investment Plan Submitted",
+          preheader: adminMessage,
+          body: `<p style="margin:0 0 16px;">${adminMessage}</p>`,
+          recipients: adminProfiles.map((a: { email: string; first_name: string | null }) => ({
+            email: a.email,
+            name: a.first_name ?? "Admin",
+          })),
+        }),
+      });
+    }
+  } catch (emailErr) {
+    console.error("Failed to send admin email notifications:", emailErr);
+  }
+
   return { uid, email: user.email ?? values.email };
 }
 

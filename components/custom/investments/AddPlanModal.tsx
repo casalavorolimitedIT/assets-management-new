@@ -260,6 +260,57 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
         units: selectedPlan === "reif" ? Number(reifUnits) : undefined,
       });
 
+      // Notify admins (in-app + email)
+      try {
+        const planLabels: Record<string, string> = {
+          premium_plus: "Premium Plus",
+          premium: "Premium",
+          reif: "REIF",
+        };
+        const planLabelStr = planLabels[selectedPlan] ?? selectedPlan;
+        const { data: userProfile } = await supabase
+          .from("profiles")
+          .select("first_name")
+          .eq("id", user.id)
+          .single();
+        const userName =
+          userProfile?.first_name ?? user.email?.split("@")[0] ?? "A user";
+        const notifMessage = `${userName} has submitted a ${planLabelStr} investment plan and it is pending review.`;
+
+        await supabase.from("notifications").insert({
+          user_id: user.id,
+          title: "New Investment Submitted",
+          message: notifMessage,
+          type: "success",
+          read: false,
+          forAdmin: true,
+        });
+
+        const { data: adminProfiles } = await supabase
+          .from("profiles")
+          .select("email, first_name")
+          .eq("role", "ADMIN");
+
+        if (adminProfiles && adminProfiles.length > 0) {
+          await fetch("/api/send-email", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              subject: `New ${planLabelStr} Plan Submitted — ${userName}`,
+              title: "New Investment Plan Submitted",
+              preheader: notifMessage,
+              body: `<p style="margin:0 0 16px;">${notifMessage}</p>`,
+              recipients: adminProfiles.map((a: { email: string; first_name: string | null }) => ({
+                email: a.email,
+                name: a.first_name ?? "Admin",
+              })),
+            }),
+          });
+        }
+      } catch (notifErr) {
+        console.error("Failed to send admin notifications:", notifErr);
+      }
+
       onSuccess(pendingPlanData);
       onClose();
     } catch (err) {

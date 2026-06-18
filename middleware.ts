@@ -53,7 +53,7 @@ export async function middleware(request: NextRequest) {
 
   // Check gateway secret for API routes
   // Internal routes that rely on session auth instead of the gateway secret
-  const INTERNAL_API_ROUTES = ["/api/send-email", "/api/update-email"];
+  const INTERNAL_API_ROUTES = ["/api/send-email", "/api/update-email", "/api/notify-plan"];
   const isInternalApiRoute = INTERNAL_API_ROUTES.some((r) =>
     request.nextUrl.pathname.startsWith(r),
   );

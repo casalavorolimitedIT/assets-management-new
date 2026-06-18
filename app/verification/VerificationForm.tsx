@@ -609,30 +609,63 @@ async function submitVerification(
   if (userNotifErr)
     console.error("Failed to send user notification:", userNotifErr.message);
 
-  // Send email to all admins
+  // Email admins via server-side route (service role bypasses RLS on profiles)
   try {
-    const { data: adminProfiles } = await supabase
-      .from("profiles")
-      .select("email, first_name")
-      .eq("role", "ADMIN");
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      const planDetails: Array<{ label: string; value: string }> = [];
 
-    if (adminProfiles && adminProfiles.length > 0) {
-      await fetch("/api/send-email", {
+      if (!values.skipInvestmentPlan && values.investmentCompany) {
+        planDetails.push({
+          label: "Investment Company",
+          value: values.investmentCompany,
+        });
+
+        if (values.investmentPlan === "premium_plus") {
+          planDetails.push(
+            {
+              label: "Amount",
+              value: `₦${Number(values.ppAmountFigures).toLocaleString()}${values.ppAmountWords ? ` — ${values.ppAmountWords}` : ""}`,
+            },
+            { label: "Tenor", value: values.ppTenor },
+            { label: "Mode of Payment", value: values.ppModeOfPayment },
+            { label: "Mode of Interest", value: values.ppModeOfInterest },
+          );
+        } else if (values.investmentPlan === "premium") {
+          planDetails.push(
+            {
+              label: "Monthly Amount",
+              value: `₦${Number(values.prMonthlyAmountFigures).toLocaleString()}${values.prMonthlyAmountWords ? ` — ${values.prMonthlyAmountWords}` : ""}`,
+            },
+            { label: "Tenor", value: values.prTenor },
+            { label: "Payment Date", value: values.prMonthlyPaymentDate },
+          );
+        } else if (values.investmentPlan === "reif") {
+          planDetails.push(
+            { label: "Units", value: values.reifUnits },
+            {
+              label: "Total Investment",
+              value: `₦${Number(values.reifTotalFigures).toLocaleString()}${values.reifTotalWords ? ` — ${values.reifTotalWords}` : ""}`,
+            },
+            { label: "Mode of Payment", value: values.reifModeOfPayment },
+            { label: "Mode of Interest", value: values.reifModeOfInterest },
+          );
+        }
+      }
+
+      await fetch("/api/notify-plan", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify({
-          subject: values.skipInvestmentPlan
-            ? `Verification Completed — ${displayName}`
-            : `New ${planLabel} Plan Submitted — ${displayName}`,
-          title: values.skipInvestmentPlan
-            ? "Verification Completed"
-            : "New Investment Plan Submitted",
-          preheader: adminMessage,
-          body: `<p style="margin:0 0 16px;">${adminMessage}</p>`,
-          recipients: adminProfiles.map((a: { email: string; first_name: string | null }) => ({
-            email: a.email,
-            name: a.first_name ?? "Admin",
-          })),
+          planLabel,
+          userName: displayName,
+          skipped: values.skipInvestmentPlan,
+          details: planDetails,
         }),
       });
     }

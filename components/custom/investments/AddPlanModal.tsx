@@ -260,7 +260,7 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
         units: selectedPlan === "reif" ? Number(reifUnits) : undefined,
       });
 
-      // Notify admins (in-app + email)
+      // Notify admins (in-app + email via server-side route to bypass RLS)
       try {
         const planLabels: Record<string, string> = {
           premium_plus: "Premium Plus",
@@ -268,6 +268,7 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
           reif: "REIF",
         };
         const planLabelStr = planLabels[selectedPlan] ?? selectedPlan;
+
         const { data: userProfile } = await supabase
           .from("profiles")
           .select("first_name")
@@ -286,24 +287,55 @@ export function AddPlanModal({ onClose, onSuccess }: AddPlanModalProps) {
           forAdmin: true,
         });
 
-        const { data: adminProfiles } = await supabase
-          .from("profiles")
-          .select("email, first_name")
-          .eq("role", "ADMIN");
+        const planDetails: Array<{ label: string; value: string }> = [
+          { label: "Investment Company", value: investmentCompany },
+        ];
 
-        if (adminProfiles && adminProfiles.length > 0) {
-          await fetch("/api/send-email", {
+        if (selectedPlan === "premium_plus") {
+          planDetails.push(
+            {
+              label: "Amount",
+              value: `₦${Number(ppAmountFigures).toLocaleString()}${ppAmountWords ? ` — ${ppAmountWords}` : ""}`,
+            },
+            { label: "Tenor", value: ppTenor },
+            { label: "Mode of Payment", value: ppModeOfPayment },
+            { label: "Mode of Interest", value: ppModeOfInterest },
+          );
+        } else if (selectedPlan === "premium") {
+          planDetails.push(
+            {
+              label: "Monthly Amount",
+              value: `₦${Number(prMonthlyAmountFigures).toLocaleString()}${prMonthlyAmountWords ? ` — ${prMonthlyAmountWords}` : ""}`,
+            },
+            { label: "Tenor", value: prTenor },
+            { label: "Payment Date", value: prMonthlyPaymentDate },
+          );
+        } else if (selectedPlan === "reif") {
+          planDetails.push(
+            { label: "Units", value: reifUnits },
+            {
+              label: "Total Investment",
+              value: `₦${Number(reifTotalFigures).toLocaleString()}${reifTotalWords ? ` — ${reifTotalWords}` : ""}`,
+            },
+            { label: "Mode of Payment", value: reifModeOfPayment },
+            { label: "Mode of Interest", value: reifModeOfInterest },
+          );
+        }
+
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          await fetch("/api/notify-plan", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+            },
             body: JSON.stringify({
-              subject: `New ${planLabelStr} Plan Submitted — ${userName}`,
-              title: "New Investment Plan Submitted",
-              preheader: notifMessage,
-              body: `<p style="margin:0 0 16px;">${notifMessage}</p>`,
-              recipients: adminProfiles.map((a: { email: string; first_name: string | null }) => ({
-                email: a.email,
-                name: a.first_name ?? "Admin",
-              })),
+              planLabel: planLabelStr,
+              userName,
+              details: planDetails,
             }),
           });
         }

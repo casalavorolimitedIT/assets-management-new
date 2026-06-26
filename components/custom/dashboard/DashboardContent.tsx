@@ -200,8 +200,8 @@ function StatCardItem({ card }: { card: StatCard }) {
           <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
             {card.label}
           </p>
-          <div className="mt-2 flex items-center gap-2">
-            <p className="text-2xl font-semibold text-zinc-900 tabular-nums">
+          <div className="mt-2 flex items-center gap-2 min-w-0">
+            <p className="text-lg font-semibold text-zinc-900 tabular-nums leading-tight break-all sm:text-xl lg:text-2xl">
               {hidden ? "••••••" : card.value}
             </p>
             <button

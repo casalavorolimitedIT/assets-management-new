@@ -673,17 +673,17 @@ export default function UserPortfolio() {
         ].map((s) => (
           <div
             key={s.label}
-            className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm"
+            className="overflow-hidden rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm min-w-0"
           >
             <div
               className={`mb-2 flex size-8 items-center justify-center rounded-lg ${s.bg} ${s.color}`}
             >
               {s.icon}
             </div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               {s.label}
             </p>
-            <p className={`mt-1 text-lg font-black tabular-nums ${s.color}`}>
+            <p className={`mt-1 break-all text-sm font-black tabular-nums leading-tight sm:text-base xl:text-lg ${s.color}`}>
               {s.value}
             </p>
           </div>

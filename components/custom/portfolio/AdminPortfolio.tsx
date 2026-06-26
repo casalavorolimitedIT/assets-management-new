@@ -1231,6 +1231,7 @@ export default function AdminPortfolio() {
               className="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 pl-10 pr-4 text-sm text-zinc-900 outline-none transition-colors placeholder:text-zinc-400 focus:border-[#ff6900] focus:bg-white"
             />
           </div>
+
           <div className="flex items-center gap-2 overflow-x-auto">
             <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-500">
               <SlidersHorizontal className="size-4" />
@@ -1239,7 +1240,7 @@ export default function AdminPortfolio() {
               <button
                 key={item.value}
                 onClick={() => setFilter(item.value)}
-                className={`h-9 rounded-xl px-3 text-xs font-semibold transition-colors ${
+                className={`h-9 rounded-xl text-xs px-1 md:px-2 font-semibold transition-colors ${
                   filter === item.value
                     ? "bg-zinc-950 text-white"
                     : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
@@ -1299,17 +1300,17 @@ export default function AdminPortfolio() {
         ].map((s) => (
           <div
             key={s.label}
-            className="rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm"
+            className="overflow-hidden rounded-2xl border border-zinc-100 bg-white p-4 shadow-sm min-w-0"
           >
             <div
               className={`mb-2 flex size-8 items-center justify-center rounded-lg ${s.bg} ${s.color}`}
             >
               {s.icon}
             </div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+            <p className="truncate text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
               {s.label}
             </p>
-            <p className={`mt-1 text-lg font-black tabular-nums ${s.color}`}>
+            <p className={`mt-1 break-all text-sm font-black tabular-nums leading-tight sm:text-base xl:text-lg ${s.color}`}>
               {s.value}
             </p>
           </div>

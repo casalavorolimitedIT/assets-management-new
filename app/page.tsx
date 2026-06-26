@@ -76,7 +76,7 @@ export default async function Page() {
           </div>
 
           {/* Orange accent rule */}
-          <div className="h-0.5 w-12 -mt-20 rounded-full bg-linear-to-r from-primary to-transparent" />
+          <div className="h-0.5 w-12 -mt-6 sm:-mt-20 rounded-full bg-linear-to-r from-primary to-transparent" />
 
           {/* Hero copy */}
           <div className="flex flex-col gap-4">
@@ -89,7 +89,7 @@ export default async function Page() {
 
             <h1
               data-display="true"
-              className="font-display text-5xl font-semibold leading-[1.07] tracking-tight text-foreground md:text-6xl"
+              className="font-display text-[2.1rem] font-semibold leading-[1.07] tracking-tight text-foreground sm:text-5xl md:text-6xl"
             >
               Your wealth, <em className="text-primary">intelligently</em>
               <br className="hidden sm:block" /> managed.
@@ -102,19 +102,19 @@ export default async function Page() {
           </div>
 
           {/* Stats strip */}
-          <div className="flex w-fit flex-wrap items-center gap-6 rounded-xl border border-primary/15 bg-white/70 px-5 py-4 shadow-sm backdrop-blur-sm">
+          <div className="grid grid-cols-3 gap-x-5 gap-y-4 rounded-xl border border-primary/15 bg-white/70 px-5 py-4 shadow-sm backdrop-blur-sm sm:flex sm:w-fit sm:flex-row sm:items-center sm:gap-6">
             {stats.map((s, i) => (
               <div key={s.label} className="flex items-center gap-6">
                 <div className="flex flex-col gap-0.5">
-                  <span className="font-display text-2xl font-semibold leading-none tracking-tight text-foreground">
+                  <span className="font-display text-xl font-semibold leading-none tracking-tight text-foreground sm:text-2xl">
                     {s.value}
                   </span>
-                  <span className="text-[0.63rem] font-medium uppercase tracking-widest text-muted-foreground">
+                  <span className="text-[0.6rem] font-medium uppercase tracking-widest text-muted-foreground">
                     {s.label}
                   </span>
                 </div>
                 {i < stats.length - 1 && (
-                  <Separator orientation="vertical" className="h-8" />
+                  <Separator orientation="vertical" className="hidden h-8 sm:block" />
                 )}
               </div>
             ))}

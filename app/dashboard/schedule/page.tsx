@@ -167,6 +167,14 @@ function buildPayoutEvents(user: UserProfile, visibleMonth: Date): CalendarEvent
     const tenorMonths = parseTenorToMonths(plan.tenor);
     if (!tenorMonths) return [];
 
+    // Skip investments that have already passed their maturity date
+    const maturityDate = plan.due_date
+      ? new Date(plan.due_date)
+      : addMonthsClamped(startDate, tenorMonths);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (maturityDate < today) return [];
+
     const totalInterest = getExpectedPayoutAmount(plan);
     const principal = getPlanAmount(plan);
     const interestMode = plan.mode_of_interest ?? "";
@@ -258,9 +266,9 @@ function buildPayoutEvents(user: UserProfile, visibleMonth: Date): CalendarEvent
     }
 
     // Fallback: single payment at maturity
-    const maturityDate = addMonthsClamped(startDate, tenorMonths);
-    if (maturityDate >= rangeStart && maturityDate <= rangeEnd) {
-      events.push(makeEvent(maturityDate, totalInterest, "maturity"));
+    const fallbackMaturity = addMonthsClamped(startDate, tenorMonths);
+    if (fallbackMaturity >= rangeStart && fallbackMaturity <= rangeEnd) {
+      events.push(makeEvent(fallbackMaturity, totalInterest, "maturity"));
     }
     return events;
   }).sort((a, b) => a.date.getTime() - b.date.getTime());

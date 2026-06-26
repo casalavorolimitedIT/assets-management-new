@@ -45,6 +45,10 @@ export interface InvestmentPlan {
   has_paid?: boolean;
   paid_months?: number[];
   custom_rate?: number;
+  interest_due_bd?: number;
+  due_date?: string;
+  liquidation?: number;
+  total_interest_paid?: number;
 }
 
 export interface Compliance {

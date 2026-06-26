@@ -25,7 +25,7 @@ import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 import type { Compliance, InvestmentPlan, UserProfile } from "@/types";
 
-type EventType = "upfront" | "monthly" | "maturity";
+type EventType = "upfront" | "monthly" | "maturity" | "bd";
 
 type CalendarEvent = {
   id: string;
@@ -221,16 +221,31 @@ function buildPayoutEvents(users: UserProfile[], visibleMonth: Date) {
           monthNumber,
         });
 
-        // Upfront: single interest payment at investment start date
-        if (interestMode === "Upfront") {
-          if (startDate < rangeStart || startDate > rangeEnd) return [];
-          return [makeEvent(startDate, totalInterest, "upfront")];
+        const events: CalendarEvent[] = [];
+
+        // B/D (balance brought down): interest carried from a prior period.
+        // Pinned to Dec 31 of the previous calendar year so all B/D items
+        // for the current tracking year land on the same date regardless of
+        // when each plan started — one month-navigation back from January.
+        const bdAmount = plan.interest_due_bd ?? 0;
+        if (bdAmount > 0) {
+          const bdDate = new Date(new Date().getFullYear() - 1, 11, 31);
+          if (bdDate >= rangeStart && bdDate <= rangeEnd) {
+            events.push(makeEvent(bdDate, bdAmount, "bd"));
+          }
         }
 
-        // Monthly: one interest installment per month throughout the tenor
-        if (interestMode === "Monthly") {
+        // Upfront: single interest payment at investment start date
+        if (interestMode === "Upfront") {
+          if (startDate >= rangeStart && startDate <= rangeEnd) {
+            events.push(makeEvent(startDate, totalInterest, "upfront"));
+          }
+          return events;
+        }
+
+        // Monthly or End of Tenor: monthly interest installments throughout the tenor
+        if (interestMode === "Monthly" || interestMode === "End of Tenor") {
           const monthlyAmount = totalInterest / tenorMonths;
-          const events: CalendarEvent[] = [];
           for (let m = 1; m <= tenorMonths; m++) {
             const eventDate = addMonthsClamped(startDate, m);
             if (eventDate >= rangeStart && eventDate <= rangeEnd) {
@@ -240,10 +255,12 @@ function buildPayoutEvents(users: UserProfile[], visibleMonth: Date) {
           return events;
         }
 
-        // End of Tenor (default): single payment at maturity
+        // Fallback default: single payment at maturity
         const maturityDate = addMonthsClamped(startDate, tenorMonths);
-        if (maturityDate < rangeStart || maturityDate > rangeEnd) return [];
-        return [makeEvent(maturityDate, totalInterest, "maturity")];
+        if (maturityDate >= rangeStart && maturityDate <= rangeEnd) {
+          events.push(makeEvent(maturityDate, totalInterest, "maturity"));
+        }
+        return events;
       });
     })
     .sort((a, b) => {
@@ -609,6 +626,7 @@ export default function PayoutSchedulePage() {
           <span className="ml-auto hidden items-center gap-3 text-[10px] text-zinc-400 sm:flex">
             <span>M1/12 = monthly installment</span>
             <span>· Upfront = interest paid at start</span>
+            <span>· Bal. B/D = balance brought down from prior year</span>
           </span>
         </div>
       </div>
@@ -701,7 +719,9 @@ export default function PayoutSchedulePage() {
                             ? ` · M${event.monthNumber}/${event.tenorMonths}`
                             : event.eventType === "upfront"
                               ? " · Upfront"
-                              : null}
+                              : event.eventType === "bd"
+                                ? " · Bal. B/D"
+                                : null}
                           {isPaid && " · Paid"}
                           {isOverdue && " · Overdue"}
                         </p>
@@ -753,7 +773,9 @@ export default function PayoutSchedulePage() {
                       ? "Monthly Installment"
                       : selected.eventType === "upfront"
                         ? "Upfront Interest"
-                        : "Payout Details"}
+                        : selected.eventType === "bd"
+                          ? "Balance Brought Down"
+                          : "Payout Details"}
                   </p>
                   {selected.hasPaid && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">

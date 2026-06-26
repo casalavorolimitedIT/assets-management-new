@@ -37,7 +37,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Compliance, InvestmentPlan, UserProfile } from "@/types";
 import { Pagination } from "../Pagination";
 
-type PortfolioFilter = "ALL" | "FUNDED" | "VERIFIED" | "PENDING";
+type PortfolioFilter = "ALL" | "FUNDED" | "VERIFIED" | "PENDING" | "BD";
 
 interface InvestorPortfolio {
   user: UserProfile;
@@ -49,6 +49,7 @@ const FILTERS: Array<{ label: string; value: PortfolioFilter }> = [
   { label: "Funded", value: "FUNDED" },
   { label: "Verified", value: "VERIFIED" },
   { label: "Pending", value: "PENDING" },
+  { label: "Has B/D", value: "BD" },
 ];
 
 const PLAN_META: Record<
@@ -136,6 +137,7 @@ const getPrincipal = (inv: InvestmentPlan): number => {
 };
 
 const getMaturityDate = (inv: InvestmentPlan): Date | null => {
+  if (inv.due_date) return new Date(inv.due_date);
   const months = parseInt(inv.tenor, 10) || 0;
   if (!months || !inv.monthly_payment_date) return null;
   const d = new Date(inv.monthly_payment_date);
@@ -145,6 +147,17 @@ const getMaturityDate = (inv: InvestmentPlan): Date | null => {
 
 const getEffectiveRate = (inv: InvestmentPlan): number =>
   inv.custom_rate ?? PLAN_META[inv.plan]?.rate ?? 0.15;
+
+// Returns the ANNUAL interest rate for display purposes.
+// custom_rate is stored as annual_rate × (tenor_months/12), so we reverse that.
+// Plans without a custom_rate fall back to PLAN_META which already stores annual rates.
+const getAnnualRate = (inv: InvestmentPlan): number => {
+  if (inv.custom_rate !== undefined && inv.custom_rate !== null) {
+    const months = parseInt(inv.tenor, 10) || 12;
+    return (inv.custom_rate * 12) / months;
+  }
+  return PLAN_META[inv.plan]?.rate ?? 0.15;
+};
 
 const getProjectedReturn = (inv: InvestmentPlan): number => {
   const principal = getPrincipal(inv);
@@ -183,9 +196,11 @@ function getUserName(user: UserProfile) {
 function AnimatedNumber({
   value,
   prefix = "₦",
+  decimals = 0,
 }: {
   value: number;
   prefix?: string;
+  decimals?: number;
 }) {
   const [display, setDisplay] = useState(0);
   const displayRef = useRef(0);
@@ -199,7 +214,7 @@ function AnimatedNumber({
     const step = (now: number) => {
       const t = Math.min((now - start) / duration, 1);
       const ease = 1 - Math.pow(1 - t, 3);
-      const next = Math.round(from + (value - from) * ease);
+      const next = t === 1 ? value : Math.round(from + (value - from) * ease);
       displayRef.current = next;
       setDisplay(next);
       if (t < 1) raf.current = requestAnimationFrame(step);
@@ -212,7 +227,10 @@ function AnimatedNumber({
   return (
     <span>
       {prefix}
-      {display.toLocaleString("en-NG")}
+      {display.toLocaleString("en-NG", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })}
     </span>
   );
 }
@@ -262,17 +280,22 @@ function PlanCard({
   owner,
   planIndex,
   onRateUpdate,
+  onBDUpdate,
 }: {
   inv: InvestmentPlan;
   index: number;
   owner?: UserProfile;
   planIndex?: number;
   onRateUpdate?: (newRate: number) => void;
+  onBDUpdate?: (newBD: number) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editingRate, setEditingRate] = useState(false);
   const [rateInput, setRateInput] = useState("");
   const [savingRate, setSavingRate] = useState(false);
+  const [editingBD, setEditingBD] = useState(false);
+  const [bdInput, setBdInput] = useState("");
+  const [savingBD, setSavingBD] = useState(false);
 
   const key = inv.plan.toLowerCase();
   const meta = PLAN_META[key] ?? PLAN_META.premium;
@@ -288,8 +311,10 @@ function PlanCard({
   const maturity = getMaturityDate(inv);
 
   const handleRateSave = async () => {
-    const newRate = parseFloat(rateInput) / 100;
-    if (isNaN(newRate) || newRate <= 0 || newRate > 1 || !owner || planIndex === undefined) {
+    const annualRatePct = parseFloat(rateInput);
+    const tenorMonths = parseInt(inv.tenor, 10) || 12;
+    const newRate = (annualRatePct / 100) * (tenorMonths / 12);
+    if (isNaN(annualRatePct) || annualRatePct <= 0 || annualRatePct > 200 || !owner || planIndex === undefined) {
       setEditingRate(false);
       return;
     }
@@ -330,6 +355,52 @@ function PlanCard({
     } finally {
       setSavingRate(false);
       setEditingRate(false);
+    }
+  };
+
+  const handleBDSave = async () => {
+    const newBD = parseFloat(bdInput);
+    if (isNaN(newBD) || newBD < 0 || !owner || planIndex === undefined) {
+      setEditingBD(false);
+      return;
+    }
+    setSavingBD(true);
+    try {
+      const supabase = createClient();
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("compliance")
+        .eq("id", owner.id)
+        .single();
+
+      const compliance = parseCompliance(profile?.compliance) ?? {};
+
+      let updatedCompliance: Record<string, unknown>;
+      if (Array.isArray(compliance.investment_plans)) {
+        const plans = (compliance.investment_plans as unknown[]).map(
+          (p, i) => (i === planIndex ? { ...(p as object), interest_due_bd: newBD } : p),
+        );
+        updatedCompliance = { ...compliance, investment_plans: plans };
+      } else if (compliance.investment_plan) {
+        updatedCompliance = {
+          ...compliance,
+          investment_plan: { ...(compliance.investment_plan as object), interest_due_bd: newBD },
+        };
+      } else {
+        return;
+      }
+
+      await supabase
+        .from("profiles")
+        .update({ compliance: updatedCompliance, updated_at: new Date().toISOString() })
+        .eq("id", owner.id);
+
+      onBDUpdate?.(newBD);
+    } catch {
+      // silent — editing cancelled
+    } finally {
+      setSavingBD(false);
+      setEditingBD(false);
     }
   };
 
@@ -442,7 +513,7 @@ function PlanCard({
             ) : (
               <>
                 <p className="text-xs font-bold text-emerald-600">
-                  {(effectiveRate * 100).toFixed(0)}%
+                  {(getAnnualRate(inv) * 100).toFixed(0)}%
                   {inv.custom_rate !== undefined && (
                     <span className="ml-0.5 text-[9px] text-[#ff6900]">✦</span>
                   )}
@@ -450,7 +521,7 @@ function PlanCard({
                 {owner && (
                   <button
                     onClick={() => {
-                      setRateInput((effectiveRate * 100).toFixed(1));
+                      setRateInput((getAnnualRate(inv) * 100).toFixed(1));
                       setEditingRate(true);
                     }}
                     className="absolute right-1 top-1 rounded p-0.5 opacity-0 transition-opacity group-hover/rate:opacity-100 hover:bg-zinc-200"
@@ -505,11 +576,17 @@ function PlanCard({
                 value: inv.investment_company,
               },
               {
-                label: "Payment Date",
+                label: "Start Date",
                 value: new Date(inv.monthly_payment_date).toLocaleDateString(
                   "en-NG",
                   { day: "numeric", month: "long", year: "numeric" },
                 ),
+              },
+              inv.due_date && {
+                label: "Due Date",
+                value: new Date(inv.due_date).toLocaleDateString("en-NG", {
+                  day: "numeric", month: "long", year: "numeric",
+                }),
               },
               inv.mode_of_payment && {
                 label: "Mode of Payment",
@@ -523,6 +600,18 @@ function PlanCard({
               inv.monthly_amount_words && {
                 label: "Amount in Words",
                 value: inv.monthly_amount_words,
+              },
+              inv.liquidation != null && inv.liquidation > 0 && {
+                label: "Liquidation",
+                value: new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(inv.liquidation),
+              },
+              inv.liquidation != null && inv.liquidation > 0 && {
+                label: "Investment Balance",
+                value: new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(principal - inv.liquidation),
+              },
+              inv.total_interest_paid != null && {
+                label: "Total Interest Paid",
+                value: new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(inv.total_interest_paid),
               },
             ]
               .filter((row): row is { label: string; value: string } =>
@@ -539,6 +628,51 @@ function PlanCard({
                   </span>
                 </div>
               ))}
+
+            {/* Interest Due B/D — inline editable for admins */}
+            {owner && (
+              <div className="group/bd flex items-center justify-between gap-3 border-t border-zinc-100 pt-2">
+                <span className="text-xs text-zinc-400">Interest Due B/D</span>
+                {editingBD ? (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs text-zinc-400">₦</span>
+                    <input
+                      autoFocus
+                      type="number"
+                      value={bdInput}
+                      onChange={(e) => setBdInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") void handleBDSave();
+                        if (e.key === "Escape") setEditingBD(false);
+                      }}
+                      onBlur={() => void handleBDSave()}
+                      className="w-28 rounded border border-[#ff6900] bg-white px-1.5 py-0.5 text-right text-xs font-bold text-[#ff6900] outline-none"
+                      min="0"
+                      step="0.01"
+                    />
+                    {savingBD && <Loader2 className="size-2.5 animate-spin text-zinc-400" />}
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-1">
+                    <span className="text-right text-xs font-semibold text-zinc-700">
+                      {inv.interest_due_bd != null
+                        ? new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(inv.interest_due_bd)
+                        : "Not set"}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setBdInput((inv.interest_due_bd ?? 0).toString());
+                        setEditingBD(true);
+                      }}
+                      className="rounded p-0.5 opacity-0 transition-opacity group-hover/bd:opacity-100 hover:bg-zinc-200"
+                      title="Edit balance brought down"
+                    >
+                      <Pencil className="size-2.5 text-zinc-400" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -954,7 +1088,8 @@ export default function AdminPortfolio() {
         filter === "ALL" ||
         (filter === "FUNDED" && plans.length > 0) ||
         (filter === "VERIFIED" && isMetamapVerified(user.metamap_status)) ||
-        (filter === "PENDING" && !isMetamapVerified(user.metamap_status));
+        (filter === "PENDING" && !isMetamapVerified(user.metamap_status)) ||
+        (filter === "BD" && plans.some((p) => (p.interest_due_bd ?? 0) > 0));
 
       return matchesSearch && matchesFilter;
     });
@@ -974,6 +1109,23 @@ export default function AdminPortfolio() {
             ...portfolio,
             plans: portfolio.plans.map((p, i) =>
               i === planIdx ? { ...p, custom_rate: newRate } : p,
+            ),
+          };
+        }),
+      );
+    },
+    [],
+  );
+
+  const handleBDUpdate = useCallback(
+    (userId: string, planIdx: number, newBD: number) => {
+      setPortfolios((prev) =>
+        prev.map((portfolio) => {
+          if (portfolio.user.id !== userId) return portfolio;
+          return {
+            ...portfolio,
+            plans: portfolio.plans.map((p, i) =>
+              i === planIdx ? { ...p, interest_due_bd: newBD } : p,
             ),
           };
         }),
@@ -1005,9 +1157,14 @@ export default function AdminPortfolio() {
   const totalGain = totalProjected - totalPrincipal;
   const avgRate =
     filteredPlans.length > 0
-      ? filteredPlans.reduce((s, p) => s + getEffectiveRate(p), 0) /
+      ? filteredPlans.reduce((s, p) => s + getAnnualRate(p), 0) /
         filteredPlans.length
       : 0;
+
+  const totalBD = filteredPlans.reduce(
+    (s, p) => s + (p.interest_due_bd ?? 0),
+    0,
+  );
 
   const planTypes = Array.from(new Set(filteredPlans.map((p) => p.plan)));
   const fundedInvestors = searchedPortfolios.filter(
@@ -1095,7 +1252,7 @@ export default function AdminPortfolio() {
         </div>
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {[
           {
             label: "Total Invested",
@@ -1131,6 +1288,13 @@ export default function AdminPortfolio() {
             icon: <Users className="size-4" />,
             color: "text-zinc-700",
             bg: "bg-zinc-100",
+          },
+          {
+            label: "Interest Due B/D",
+            value: <AnimatedNumber value={totalBD} decimals={2} />,
+            icon: <Clock className="size-4" />,
+            color: "text-amber-600",
+            bg: "bg-amber-50",
           },
         ].map((s) => (
           <div
@@ -1311,6 +1475,7 @@ export default function AdminPortfolio() {
                   index={i}
                   planIndex={planIndex}
                   onRateUpdate={(newRate) => handleRateUpdate(owner.id, planIndex, newRate)}
+                  onBDUpdate={(newBD) => handleBDUpdate(owner.id, planIndex, newBD)}
                 />
               ))}
             </div>

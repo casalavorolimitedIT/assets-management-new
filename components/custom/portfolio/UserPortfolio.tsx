@@ -17,6 +17,7 @@ import {
   Layers,
   Info,
   Target,
+  AlertTriangle,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { Pagination } from "../Pagination";
@@ -36,6 +37,10 @@ interface InvestmentPlan {
   units?: number;
   custom_rate?: number;
   investment_company?: string;
+  interest_due_bd?: number;
+  due_date?: string;
+  liquidation?: number;
+  total_interest_paid?: number;
 }
 
 const PLAN_META: Record<
@@ -92,6 +97,7 @@ const getPrincipal = (inv: InvestmentPlan): number =>
   inv.monthly_amount_figures ?? inv.amount_figures ?? inv.total_figures ?? 0;
 
 const getMaturityDate = (inv: InvestmentPlan): Date | null => {
+  if (inv.due_date) return new Date(inv.due_date);
   const months = parseInt(inv.tenor) || 0;
   if (!months || !inv.monthly_payment_date) return null;
   const d = new Date(inv.monthly_payment_date);
@@ -101,6 +107,14 @@ const getMaturityDate = (inv: InvestmentPlan): Date | null => {
 
 const getEffectiveRate = (inv: InvestmentPlan): number =>
   inv.custom_rate ?? PLAN_META[inv.plan]?.rate ?? 0.15;
+
+const getAnnualRate = (inv: InvestmentPlan): number => {
+  if (inv.custom_rate !== undefined && inv.custom_rate !== null) {
+    const months = parseInt(inv.tenor) || 12;
+    return (inv.custom_rate * 12) / months;
+  }
+  return PLAN_META[inv.plan]?.rate ?? 0.15;
+};
 
 const getProjectedReturn = (inv: InvestmentPlan): number => {
   const principal = getPrincipal(inv);
@@ -125,9 +139,11 @@ const getDaysRemaining = (inv: InvestmentPlan): number => {
 function AnimatedNumber({
   value,
   prefix = "₦",
+  decimals = 0,
 }: {
   value: number;
   prefix?: string;
+  decimals?: number;
 }) {
   const [display, setDisplay] = useState(0);
   const raf = useRef<number>(0);
@@ -140,7 +156,7 @@ function AnimatedNumber({
     const step = (now: number) => {
       const t = Math.min((now - start) / duration, 1);
       const ease = 1 - Math.pow(1 - t, 3);
-      setDisplay(Math.round(from + (value - from) * ease));
+      setDisplay(t === 1 ? value : Math.round(from + (value - from) * ease));
       if (t < 1) raf.current = requestAnimationFrame(step);
     };
 
@@ -151,7 +167,10 @@ function AnimatedNumber({
   return (
     <span>
       {prefix}
-      {display.toLocaleString("en-NG")}
+      {display.toLocaleString("en-NG", {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })}
     </span>
   );
 }
@@ -248,6 +267,23 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
           </div>
         </div>
 
+        {/* Interest Due B/D notice */}
+        {(inv.interest_due_bd ?? 0) > 0 && (
+          <div className="mb-4 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-amber-800">Interest Due B/D</p>
+              <p className="mt-0.5 text-xs text-amber-700">
+                {new Intl.NumberFormat("en-NG", {
+                  style: "currency",
+                  currency: "NGN",
+                  maximumFractionDigits: 2,
+                }).format(inv.interest_due_bd!)} carried forward from prior period
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Progress section */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
@@ -302,7 +338,7 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
           <div className="rounded-xl bg-zinc-50 p-3 text-center">
             <TrendingUp className="size-3.5 text-emerald-500 mx-auto mb-1" />
             <p className="text-xs font-bold text-emerald-600">
-              {(getEffectiveRate(inv) * 100).toFixed(0)}% p.a.
+              {(getAnnualRate(inv) * 100).toFixed(0)}% p.a.
             </p>
             <p className="text-[10px] text-zinc-400">Rate</p>
           </div>
@@ -350,11 +386,17 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
                 value: inv.investment_company,
               },
               {
-                label: "Payment Date",
+                label: "Start Date",
                 value: new Date(inv.monthly_payment_date).toLocaleDateString(
                   "en-NG",
                   { day: "numeric", month: "long", year: "numeric" },
                 ),
+              },
+              inv.due_date && {
+                label: "Due Date",
+                value: new Date(inv.due_date).toLocaleDateString("en-NG", {
+                  day: "numeric", month: "long", year: "numeric",
+                }),
               },
               inv.mode_of_payment && {
                 label: "Mode of Payment",
@@ -374,6 +416,18 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
                   inv.amount_words ??
                   inv.total_words,
               },
+              inv.liquidation != null && inv.liquidation > 0 && {
+                label: "Liquidation",
+                value: new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(inv.liquidation),
+              },
+              inv.liquidation != null && inv.liquidation > 0 && {
+                label: "Investment Balance",
+                value: new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(getPrincipal(inv) - inv.liquidation),
+              },
+              inv.total_interest_paid != null && {
+                label: "Total Interest Paid",
+                value: new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 2 }).format(inv.total_interest_paid),
+              },
             ]
               .filter(Boolean)
               .map((row: any) => (
@@ -387,6 +441,19 @@ function PlanCard({ inv, index }: { inv: InvestmentPlan; index: number }) {
                   </span>
                 </div>
               ))}
+
+            {(inv.interest_due_bd ?? 0) > 0 && (
+              <div className="flex items-center justify-between border-t border-zinc-100 pt-2">
+                <span className="text-xs text-amber-600 font-medium">Interest Due B/D</span>
+                <span className="text-xs font-bold text-amber-700">
+                  {new Intl.NumberFormat("en-NG", {
+                    style: "currency",
+                    currency: "NGN",
+                    maximumFractionDigits: 2,
+                  }).format(inv.interest_due_bd!)}
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -519,8 +586,9 @@ export default function UserPortfolio() {
   const totalGain = totalProjected - totalPrincipal;
   const avgRate =
     allPlans.length > 0
-      ? allPlans.reduce((s, p) => s + getEffectiveRate(p), 0) / allPlans.length
+      ? allPlans.reduce((s, p) => s + getAnnualRate(p), 0) / allPlans.length
       : 0;
+  const totalBD = allPlans.reduce((s, p) => s + (p.interest_due_bd ?? 0), 0);
 
   const planTypes = Array.from(new Set(allPlans.map((p) => p.plan)));
 
@@ -561,7 +629,7 @@ export default function UserPortfolio() {
       </div>
 
       {/* ── Hero summary strip ── */}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className={`mb-6 grid grid-cols-2 gap-3 ${totalBD > 0 ? "sm:grid-cols-3 xl:grid-cols-5" : "sm:grid-cols-4"}`}>
         {[
           {
             label: "Total Invested",
@@ -591,6 +659,17 @@ export default function UserPortfolio() {
             color: "text-violet-600",
             bg: "bg-violet-50",
           },
+          ...(totalBD > 0
+            ? [
+                {
+                  label: "Interest Due B/D",
+                  value: <AnimatedNumber value={totalBD} decimals={2} />,
+                  icon: <AlertTriangle className="size-4" />,
+                  color: "text-amber-600",
+                  bg: "bg-amber-50",
+                },
+              ]
+            : []),
         ].map((s) => (
           <div
             key={s.label}

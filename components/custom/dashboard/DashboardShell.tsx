@@ -21,6 +21,7 @@ import {
   Users,
   Megaphone,
   BanknoteArrowDown,
+  CalendarDays,
 } from "lucide-react";
 import { logout } from "@/app/(auth)/actions/auth-actions";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Investments", href: "/dashboard/investments", icon: TrendingUp },
   { label: "Portfolio", href: "/dashboard/portfolio", icon: Wallet },
+  { label: "Payout Schedule", href: "/dashboard/schedule", icon: CalendarDays },
   {
     label: "Transactions",
     href: "/dashboard/transactions",

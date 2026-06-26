@@ -25,7 +25,7 @@ import { normalizeRole } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/client";
 import type { Compliance, InvestmentPlan, UserProfile } from "@/types";
 
-type EventType = "upfront" | "monthly" | "maturity" | "bd";
+type EventType = "upfront" | "monthly" | "quarterly" | "annually" | "compounding" | "maturity" | "bd";
 
 type CalendarEvent = {
   id: string;
@@ -211,7 +211,7 @@ function buildPayoutEvents(users: UserProfile[], visibleMonth: Date) {
           tenorMonths,
           planIndex,
           hasPaid:
-            eventType === "monthly"
+            eventType === "monthly" || eventType === "quarterly" || eventType === "annually" || eventType === "compounding"
               ? (plan.paid_months ?? []).includes(monthNumber!)
               : plan.has_paid === true,
           user,
@@ -250,6 +250,44 @@ function buildPayoutEvents(users: UserProfile[], visibleMonth: Date) {
             const eventDate = addMonthsClamped(startDate, m);
             if (eventDate >= rangeStart && eventDate <= rangeEnd) {
               events.push(makeEvent(eventDate, monthlyAmount, "monthly", m));
+            }
+          }
+          return events;
+        }
+
+        // Quarterly: one interest payment every 3 months
+        if (interestMode === "Quarterly") {
+          const numPeriods = Math.max(1, Math.round(tenorMonths / 3));
+          const quarterlyAmount = totalInterest / numPeriods;
+          for (let q = 1; q <= numPeriods; q++) {
+            const eventDate = addMonthsClamped(startDate, q * 3);
+            if (eventDate >= rangeStart && eventDate <= rangeEnd) {
+              events.push(makeEvent(eventDate, quarterlyAmount, "quarterly", q));
+            }
+          }
+          return events;
+        }
+
+        // Annually: one interest payment per year
+        if (interestMode === "Annually") {
+          const numYears = Math.max(1, Math.round(tenorMonths / 12));
+          const yearlyAmount = totalInterest / numYears;
+          for (let y = 1; y <= numYears; y++) {
+            const eventDate = addMonthsClamped(startDate, y * 12);
+            if (eventDate >= rangeStart && eventDate <= rangeEnd) {
+              events.push(makeEvent(eventDate, yearlyAmount, "annually", y));
+            }
+          }
+          return events;
+        }
+
+        // Compounding: monthly installments like Monthly/End of Tenor, labeled distinctly
+        if (interestMode === "Compounding") {
+          const monthlyAmount = totalInterest / tenorMonths;
+          for (let m = 1; m <= tenorMonths; m++) {
+            const eventDate = addMonthsClamped(startDate, m);
+            if (eventDate >= rangeStart && eventDate <= rangeEnd) {
+              events.push(makeEvent(eventDate, monthlyAmount, "compounding", m));
             }
           }
           return events;
@@ -373,7 +411,8 @@ export default function PayoutSchedulePage() {
       let updatedCompliance: Partial<Compliance>;
 
       const patchPlan = (plan: InvestmentPlan): InvestmentPlan => {
-        if (event.eventType === "monthly" && event.monthNumber !== undefined) {
+        const isPeriodic = event.eventType === "monthly" || event.eventType === "quarterly" || event.eventType === "annually" || event.eventType === "compounding";
+        if (isPeriodic && event.monthNumber !== undefined) {
           const paidMonths = [...(plan.paid_months ?? [])];
           if (!paidMonths.includes(event.monthNumber)) paidMonths.push(event.monthNumber);
           return { ...plan, paid_months: paidMonths };
@@ -624,9 +663,12 @@ export default function PayoutSchedulePage() {
             <span className="size-2.5 rounded-full bg-[#ff6900]" /> Upcoming
           </span>
           <span className="ml-auto hidden items-center gap-3 text-[10px] text-zinc-400 sm:flex">
-            <span>M1/12 = monthly installment</span>
+            <span>M1/12 = monthly</span>
+            <span>· Q1/4 = quarterly</span>
+            <span>· Y1/2 = annually</span>
+            <span>· C1/11 = compounding</span>
             <span>· Upfront = interest paid at start</span>
-            <span>· Bal. B/D = balance brought down from prior year</span>
+            <span>· Bal. B/D = balance brought down</span>
           </span>
         </div>
       </div>
@@ -717,11 +759,17 @@ export default function PayoutSchedulePage() {
                           {PLAN_LABELS[event.plan.plan] ?? event.plan.plan}
                           {event.eventType === "monthly" && event.monthNumber !== undefined
                             ? ` · M${event.monthNumber}/${event.tenorMonths}`
-                            : event.eventType === "upfront"
-                              ? " · Upfront"
-                              : event.eventType === "bd"
-                                ? " · Bal. B/D"
-                                : null}
+                            : event.eventType === "quarterly" && event.monthNumber !== undefined
+                              ? ` · Q${event.monthNumber}/${Math.round(event.tenorMonths / 3)}`
+                              : event.eventType === "annually" && event.monthNumber !== undefined
+                                ? ` · Y${event.monthNumber}/${Math.round(event.tenorMonths / 12)}`
+                                : event.eventType === "compounding" && event.monthNumber !== undefined
+                                  ? ` · C${event.monthNumber}/${event.tenorMonths}`
+                                  : event.eventType === "upfront"
+                                    ? " · Upfront"
+                                    : event.eventType === "bd"
+                                      ? " · Bal. B/D"
+                                      : null}
                           {isPaid && " · Paid"}
                           {isOverdue && " · Overdue"}
                         </p>
@@ -771,11 +819,17 @@ export default function PayoutSchedulePage() {
                   <p className="text-xs font-semibold uppercase tracking-wider text-[#ff6900]">
                     {selected.eventType === "monthly"
                       ? "Monthly Installment"
-                      : selected.eventType === "upfront"
-                        ? "Upfront Interest"
-                        : selected.eventType === "bd"
-                          ? "Balance Brought Down"
-                          : "Payout Details"}
+                      : selected.eventType === "quarterly"
+                        ? "Quarterly Interest"
+                        : selected.eventType === "annually"
+                          ? "Annual Interest"
+                          : selected.eventType === "upfront"
+                            ? "Upfront Interest"
+                            : selected.eventType === "compounding"
+                              ? "Compounding Interest"
+                              : selected.eventType === "bd"
+                                ? "Balance Brought Down"
+                                : "Payout Details"}
                   </p>
                   {selected.hasPaid && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
@@ -865,10 +919,16 @@ export default function PayoutSchedulePage() {
                       label="Interest repayment"
                       value={selected.plan.mode_of_interest}
                     />
-                    {selected.eventType === "monthly" && selected.monthNumber !== undefined && (
+                    {(selected.eventType === "monthly" || selected.eventType === "quarterly" || selected.eventType === "annually" || selected.eventType === "compounding") && selected.monthNumber !== undefined && (
                       <DetailRow
                         label="Installment"
-                        value={`Month ${selected.monthNumber} of ${selected.tenorMonths}`}
+                        value={
+                          selected.eventType === "quarterly"
+                            ? `Quarter ${selected.monthNumber} of ${Math.round(selected.tenorMonths / 3)}`
+                            : selected.eventType === "annually"
+                              ? `Year ${selected.monthNumber} of ${Math.round(selected.tenorMonths / 12)}`
+                              : `Month ${selected.monthNumber} of ${selected.tenorMonths}`
+                        }
                       />
                     )}
                     <DetailRow

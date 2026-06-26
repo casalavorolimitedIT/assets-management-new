@@ -10,6 +10,8 @@
 --                          interest_due_bd (was only in plans[0])
 --   3. OLADIMEJI AND SONS — mode_of_interest was "End of Tenor";
 --                           PDF specifies "Quarterly"
+--   4. ADEYEMO OLANIKE   — Plan A mode_of_interest was "End of Tenor";
+--                           should be "Compounding" (12% compound interest)
 -- ============================================================
 
 
@@ -51,6 +53,22 @@ SET compliance = jsonb_set(
 WHERE email = 'oladimeji.sons@casalavoro.import';
 
 
+-- 4. ADEYEMO OLANIKE — fix Plan A mode_of_interest to "Compounding"
+UPDATE public.profiles
+SET compliance = jsonb_set(
+    jsonb_set(
+        compliance,
+        '{investment_plans,0,mode_of_interest}',
+        '"Compounding"',
+        true
+    ),
+    '{investment_plan,mode_of_interest}',
+    '"Compounding"',
+    true
+)
+WHERE email = 'adeyemo.olanike@whitecrust.import';
+
+
 -- ── Verification ─────────────────────────────────────────────
 SELECT
     email,
@@ -68,6 +86,7 @@ FROM public.profiles
 WHERE email IN (
     'aniefiok.idiong@whitecrust.import',
     'comfort.okekwue@whitecrust.import',
-    'oladimeji.sons@casalavoro.import'
+    'oladimeji.sons@casalavoro.import',
+    'adeyemo.olanike@whitecrust.import'
 )
 ORDER BY email;

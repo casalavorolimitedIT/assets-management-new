@@ -345,8 +345,8 @@ SELECT _seed_investor(
 -- ============================================================
 
 -- 17. ADEYEMO OLANIKE  (2 plans)
--- Plan A: Premium  11M 12% compounding → stored as flat 0.11 End of Tenor ₦100,000
--- Plan B: Premium Plus 8M 20% pa → flat 0.1333 End of Tenor ₦200,000
+-- Plan A: Premium  11M 12% compounding (flat 0.11) Compounding ₦100,000
+-- Plan B: Premium Plus 8M 20% pa (flat 0.1333) End of Tenor ₦200,000
 SELECT _seed_investor(
   'adeyemo.olanike@whitecrust.import',
   'Adeyemo', 'Olanike', 'Mrs',
@@ -354,9 +354,9 @@ SELECT _seed_investor(
     "bio_data":{"lga":"","phone":"","next_of_kin":"","date_of_birth":"","signature_url":"","employment_type":[],"state_of_origin":"","next_of_kin_phone":"","passport_photo_url":"","next_of_kin_address":""},
     "bank_details":{"bank_name":"","account_name":"","account_number":""},
     "personal_info":{"gender":"","id_number":"","job_title":"","occupation":"","means_of_id":"","nationality":"Nigerian","employer_name":"","office_address":""},
-    "investment_plan":{"plan":"premium","tenor":"11 Months","custom_rate":0.11,"mode_of_payment":"Bank Transfer","mode_of_interest":"End of Tenor","monthly_amount_words":"","monthly_payment_date":"2026-02-10","due_date":"2027-01-31","monthly_amount_figures":100000,"investment_company":"White Crust Limited"},
+    "investment_plan":{"plan":"premium","tenor":"11 Months","custom_rate":0.11,"mode_of_payment":"Bank Transfer","mode_of_interest":"Compounding","monthly_amount_words":"","monthly_payment_date":"2026-02-10","due_date":"2027-01-31","monthly_amount_figures":100000,"investment_company":"White Crust Limited"},
     "investment_plans":[
-      {"plan":"premium","tenor":"11 Months","custom_rate":0.11,"mode_of_payment":"Bank Transfer","mode_of_interest":"End of Tenor","monthly_amount_words":"","monthly_payment_date":"2026-02-10","due_date":"2027-01-31","monthly_amount_figures":100000,"investment_company":"White Crust Limited"},
+      {"plan":"premium","tenor":"11 Months","custom_rate":0.11,"mode_of_payment":"Bank Transfer","mode_of_interest":"Compounding","monthly_amount_words":"","monthly_payment_date":"2026-02-10","due_date":"2027-01-31","monthly_amount_figures":100000,"investment_company":"White Crust Limited"},
       {"plan":"premium_plus","tenor":"8 Months","custom_rate":0.1333,"mode_of_payment":"Bank Transfer","mode_of_interest":"End of Tenor","monthly_amount_words":"","monthly_payment_date":"2026-05-12","due_date":"2027-01-31","monthly_amount_figures":200000,"investment_company":"White Crust Limited"}
     ]
   }'::jsonb

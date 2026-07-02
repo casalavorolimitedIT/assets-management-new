@@ -140,6 +140,94 @@ function getUserName(user: UserProfile) {
   );
 }
 
+function getEventTypeLabel(eventType: EventType) {
+  switch (eventType) {
+    case "monthly":
+      return "Monthly Installment";
+    case "quarterly":
+      return "Quarterly Interest";
+    case "annually":
+      return "Annual Interest";
+    case "upfront":
+      return "Upfront Interest";
+    case "compounding":
+      return "Compounding Interest";
+    case "bd":
+      return "Balance Brought Down";
+    default:
+      return "Payout";
+  }
+}
+
+function buildPayoutEmailBody(event: CalendarEvent): string {
+  const investorName = getUserName(event.user);
+  const planLabel = PLAN_LABELS[event.plan.plan] ?? event.plan.plan;
+  const typeLabel = getEventTypeLabel(event.eventType);
+  const payoutDate = formatDate(event.date);
+  const amount = formatCurrency(event.amount);
+
+  return `
+    <p style="margin:0 0 20px;">Hi ${investorName},</p>
+    <p style="margin:0 0 24px;">A payout has been made to your account for your <strong>${planLabel}</strong> investment plan. Here are the details:</p>
+
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%"
+      style="border:1px solid #e5e7eb;border-radius:8px;border-collapse:separate;margin-bottom:8px;background:#f9fafb;">
+      <tr>
+        <td style="padding:14px 20px 8px;font-size:12px;font-weight:700;color:#6b7280;letter-spacing:0.8px;text-transform:uppercase;">
+          Payout Summary
+        </td>
+      </tr>
+      ${[
+        ["Plan", planLabel],
+        ["Payout Type", typeLabel],
+        ["Amount", amount],
+        ["Date", payoutDate],
+      ]
+        .map(([label, value], i, arr) => `
+      <tr>
+        <td style="padding:10px 20px${i === arr.length - 1 ? " 14px" : ""};width:150px;font-size:13px;color:#6b7280;border-top:1px solid #e5e7eb;">${label}</td>
+        <td style="padding:10px 20px${i === arr.length - 1 ? " 14px" : ""};font-size:13px;font-weight:600;color:#111827;border-top:1px solid #e5e7eb;">${value}</td>
+      </tr>`)
+        .join("")}
+    </table>
+
+    <p style="margin:24px 0 4px;color:#6b7280;font-size:14px;">If you have any questions, reply to this email and our support team will assist you.</p>
+    <p style="margin:4px 0 0;font-size:14px;">Thank you for investing with us.</p>
+  `;
+}
+
+async function sendPayoutEmail(event: CalendarEvent): Promise<Error | null> {
+  if (!event.user?.email) return new Error("User email is not available.");
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const planLabel = PLAN_LABELS[event.plan.plan] ?? event.plan.plan;
+
+  try {
+    const response = await fetch("/api/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        subject: `A payout has been made to your ${planLabel} account`,
+        title: "Payout Made",
+        preheader: `A payout of ${formatCurrency(event.amount)} has been made to your ${planLabel} account.`,
+        body: buildPayoutEmailBody(event),
+        ctaLabel: "View Dashboard",
+        ctaUrl: `${appUrl}/dashboard`,
+        recipients: [
+          { id: event.user.id, email: event.user.email, name: getUserName(event.user) },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => null);
+      return new Error(errorData?.message ?? `Email API responded with status ${response.status}`);
+    }
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error : new Error("Failed to send payout email.");
+  }
+}
+
 function getInitials(user: UserProfile) {
   return (
     `${user.first_name?.[0] ?? ""}${user.last_name?.[0] ?? ""}`.toUpperCase() ||
@@ -457,6 +545,51 @@ export default function PayoutSchedulePage() {
       setSelected((prev) =>
         prev?.id === event.id ? { ...prev, hasPaid: true } : prev,
       );
+
+      const planLabel = PLAN_LABELS[event.plan.plan] ?? event.plan.plan;
+      const now = new Date().toISOString();
+      const warnings: string[] = [];
+
+      const { error: txErr } = await supabase.from("transactions").insert({
+        user_id: event.user.id,
+        plan: event.plan.plan,
+        type: "payout",
+        description: `${getEventTypeLabel(event.eventType)} payout — ${planLabel}`,
+        amount: event.amount.toFixed(2),
+        status: "active",
+        created_at: now,
+        updated_at: now,
+      });
+      if (txErr) {
+        console.error("Failed to record payout transaction:", txErr.message);
+        warnings.push("transaction record");
+      }
+
+      const { error: notifErr } = await supabase.from("notifications").insert({
+        user_id: event.user.id,
+        title: "Payout Made",
+        message: `A payout of ${formatCurrency(event.amount)} has been made to your account.`,
+        type: "success",
+        read: false,
+        forAdmin: false,
+        href: "/dashboard/portfolio",
+      });
+      if (notifErr) {
+        console.error("Failed to send payout notification:", notifErr.message);
+        warnings.push("in-app notification");
+      }
+
+      const emailErr = await sendPayoutEmail(event);
+      if (emailErr) {
+        console.error("Failed to send payout email:", emailErr.message);
+        warnings.push("email");
+      }
+
+      if (warnings.length > 0) {
+        setActionError(
+          `Marked as paid, but failed to send: ${warnings.join(", ")}. Check the console for details.`,
+        );
+      }
     } catch (err) {
       setActionError(
         err instanceof Error ? err.message : "Failed to mark as paid.",

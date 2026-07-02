@@ -368,6 +368,7 @@ export default function PayoutSchedulePage() {
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
   );
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
+  const [expandedDay, setExpandedDay] = useState<Date | null>(null);
   const [search, setSearch] = useState("");
 
   const fetchUsers = useCallback(async () => {
@@ -779,7 +780,7 @@ export default function PayoutSchedulePage() {
 
                   {dayEvents.length > 4 && (
                     <button
-                      onClick={() => setSelected(dayEvents[4])}
+                      onClick={() => setExpandedDay(date)}
                       className="w-full rounded-lg bg-zinc-100 px-2 py-1 text-left text-[10px] font-semibold text-zinc-500 transition-colors hover:bg-zinc-200"
                     >
                       +{dayEvents.length - 4} more payout
@@ -802,6 +803,90 @@ export default function PayoutSchedulePage() {
           <p className="mt-1 text-xs text-zinc-400">
             Try another month or clear the search field.
           </p>
+        </div>
+      )}
+
+      {expandedDay && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
+          <button
+            aria-label="Close"
+            className="absolute inset-0 bg-black/45"
+            onClick={() => setExpandedDay(null)}
+          />
+          <div className="relative max-h-full w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between gap-4 border-b border-zinc-200 px-5 py-4">
+              <h2 className="text-sm font-bold text-zinc-950">
+                Payouts on {formatDate(expandedDay)}
+              </h2>
+              <button
+                onClick={() => setExpandedDay(null)}
+                className="flex size-9 shrink-0 items-center justify-center rounded-xl text-zinc-500 transition-colors hover:bg-zinc-100"
+                aria-label="Close"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+            <div className="max-h-[calc(100vh-200px)] space-y-1.5 overflow-y-auto px-5 py-4">
+              {filteredEvents
+                .filter((event) => sameDay(event.date, expandedDay))
+                .map((event) => {
+                  const isOverdue = event.date < today && !event.hasPaid;
+                  const isPaid = event.hasPaid;
+
+                  return (
+                    <button
+                      key={event.id}
+                      onClick={() => {
+                        setSelected(event);
+                        setExpandedDay(null);
+                      }}
+                      className={`group w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                        isPaid
+                          ? "border-emerald-300 bg-emerald-50 hover:border-emerald-500 hover:bg-emerald-100"
+                          : isOverdue
+                            ? "border-red-300 bg-red-50 hover:border-red-500 hover:bg-red-100"
+                            : "border-[#ffd8bd] bg-[#fff7f0] hover:border-[#ff6900] hover:bg-[#fff1e6]"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-xs font-bold text-zinc-900">
+                          {getUserName(event.user)}
+                        </span>
+                        <span
+                          className={`shrink-0 text-xs font-bold tabular-nums ${
+                            isPaid
+                              ? "text-emerald-600"
+                              : isOverdue
+                                ? "text-red-600"
+                                : "text-[#ff6900]"
+                          }`}
+                        >
+                          {formatCurrency(event.amount)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-[10px] font-medium text-zinc-500">
+                        {PLAN_LABELS[event.plan.plan] ?? event.plan.plan}
+                        {event.eventType === "monthly" && event.monthNumber !== undefined
+                          ? ` · M${event.monthNumber}/${event.tenorMonths}`
+                          : event.eventType === "quarterly" && event.monthNumber !== undefined
+                            ? ` · Q${event.monthNumber}/${Math.round(event.tenorMonths / 3)}`
+                            : event.eventType === "annually" && event.monthNumber !== undefined
+                              ? ` · Y${event.monthNumber}/${Math.round(event.tenorMonths / 12)}`
+                              : event.eventType === "compounding" && event.monthNumber !== undefined
+                                ? ` · C${event.monthNumber}/${event.tenorMonths}`
+                                : event.eventType === "upfront"
+                                  ? " · Upfront"
+                                  : event.eventType === "bd"
+                                    ? " · Bal. B/D"
+                                    : null}
+                        {isPaid && " · Paid"}
+                        {isOverdue && " · Overdue"}
+                      </p>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
         </div>
       )}
 
@@ -890,10 +975,29 @@ export default function PayoutSchedulePage() {
                     Payout
                   </h3>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                    <DetailRow
-                      label="Amount to pay"
-                      value={formatCurrency(selected.amount)}
-                    />
+                    {selected.plan.has_withholding_tax ? (
+                      <>
+                        <DetailRow
+                          label="Gross interest"
+                          value={formatCurrency(selected.amount)}
+                        />
+                        <DetailRow
+                          label="Withholding tax (10%)"
+                          value={`–${formatCurrency(selected.amount * 0.1)}`}
+                        />
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                          <p className="text-xs font-medium text-emerald-600">Net amount to pay</p>
+                          <p className="mt-1 text-sm font-bold text-emerald-900">
+                            {formatCurrency(selected.amount * 0.9)}
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <DetailRow
+                        label="Amount to pay"
+                        value={formatCurrency(selected.amount)}
+                      />
+                    )}
                     <DetailRow
                       label="Payout date"
                       value={formatDate(selected.date)}

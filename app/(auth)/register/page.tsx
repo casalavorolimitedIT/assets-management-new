@@ -36,6 +36,12 @@ import {
 } from "lucide-react";
 import { register, RegisterValues } from "@/hooks/auth";
 
+function formatAUM(value: number): string {
+  if (value >= 1_000_000_000) return `₦${(value / 1_000_000_000).toFixed(1)}B`;
+  if (value >= 1_000_000) return `₦${(value / 1_000_000).toFixed(0)}M`;
+  return `₦${value.toLocaleString("en-NG")}`;
+}
+
 const TITLES = ["Mr", "Mrs", "Miss", "Dr", "Prof"] as const;
 
 const validationSchema = Yup.object({
@@ -65,6 +71,20 @@ const validationSchema = Yup.object({
 export default function RegisterPage() {
   const router = useRouter();
   const [showPassword, setShowPassword] = React.useState(false);
+  const [portfolioStats, setPortfolioStats] = React.useState<{
+    totalAUM: number;
+    totalInvestors: number;
+    totalPlans: number;
+  } | null>(null);
+
+  React.useEffect(() => {
+    fetch("/api/portfolio-stats")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!data.error) setPortfolioStats(data);
+      })
+      .catch(() => {});
+  }, []);
 
   const formik = useFormik<RegisterValues>({
     initialValues: {
@@ -117,9 +137,18 @@ export default function RegisterPage() {
       : "";
 
   const stats = [
-    { value: "$4.2B", label: "Assets Under Management" },
-    { value: "18K+", label: "Active Portfolios" },
-    { value: "99.9%", label: "Platform Uptime" },
+    {
+      value: portfolioStats ? formatAUM(portfolioStats.totalAUM) : "—",
+      label: "Assets Under Management",
+    },
+    {
+      value: portfolioStats ? `${portfolioStats.totalInvestors}` : "—",
+      label: "Active Investors",
+    },
+    {
+      value: portfolioStats ? `${portfolioStats.totalPlans}` : "—",
+      label: "Investment Plans",
+    },
   ];
 
   return (

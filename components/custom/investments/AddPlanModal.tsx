@@ -12,7 +12,7 @@ import {
 import BankDetailsDisplay from "../BankDetailsDisplay";
 
 type ModalPlan = "premium_plus" | "premium" | "reif";
-const INVESTMENT_COMPANIES = ["Casalavoro Limited", "White Crust Limited"] as const;
+const INVESTMENT_COMPANIES = ["Casalavoro Limited", "White Crust Limited", "Rich-Oak Limited", "Oak-Rief Limited"] as const;
 
 const TENORS = [
   "3 Months",

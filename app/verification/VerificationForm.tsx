@@ -180,7 +180,7 @@ const TENORS = [
 ];
 const PAYMENT_MODES = ["Bank Transfer", "Cheque", "Cash"];
 const INTEREST_MODES = ["Upfront", "Monthly", "End of Tenor"];
-const INVESTMENT_COMPANIES = ["Casalavoro Limited", "White Crust Limited"];
+const INVESTMENT_COMPANIES = ["Casalavoro Limited", "White Crust Limited", "Rich-Oak Limited", "Oak-Rief Limited"];
 const NIGERIAN_STATES = [
   "Abia",
   "Adamawa",

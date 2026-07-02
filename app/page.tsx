@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,12 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 
+function formatAUM(value: number): string {
+  if (value >= 1_000_000_000) return `₦${(value / 1_000_000_000).toFixed(1)}B`;
+  if (value >= 1_000_000) return `₦${(value / 1_000_000).toFixed(0)}M`;
+  return `₦${value.toLocaleString("en-NG")}`;
+}
+
 export default async function Page() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
@@ -31,10 +38,42 @@ export default async function Page() {
     redirect("/dashboard");
   }
 
+  const serviceClient = createServiceClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: {
+        headers: {
+          "x-api-gateway-secret": process.env.SUPABASE_API_GATEWAY_SECRET!,
+        },
+      },
+    },
+  );
+
+  const { data: profiles } = await serviceClient
+    .from("profiles")
+    .select("compliance")
+    .eq("role", "USER");
+
+  let totalAUM = 0;
+  let totalPlans = 0;
+  for (const profile of profiles ?? []) {
+    const c =
+      typeof profile.compliance === "string"
+        ? (() => { try { return JSON.parse(profile.compliance); } catch { return null; } })()
+        : profile.compliance;
+    const plans: any[] = c?.investment_plans ?? (c?.investment_plan ? [c.investment_plan] : []);
+    totalPlans += plans.length;
+    for (const plan of plans) {
+      totalAUM += plan.total_figures ?? plan.monthly_amount_figures ?? 0;
+    }
+  }
+
   const stats = [
-    { value: "$4.2B", label: "Assets Under Management" },
-    { value: "18K+", label: "Active Portfolios" },
-    { value: "99.9%", label: "Platform Uptime" },
+    { value: formatAUM(totalAUM), label: "Assets Under Management" },
+    { value: `${profiles?.length ?? 0}`, label: "Active Investors" },
+    { value: `${totalPlans}`, label: "Investment Plans" },
   ];
 
   const features = [

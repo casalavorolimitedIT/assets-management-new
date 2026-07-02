@@ -49,6 +49,7 @@ export interface InvestmentPlan {
   due_date?: string;
   liquidation?: number;
   total_interest_paid?: number;
+  has_withholding_tax?: boolean;
 }
 
 export interface Compliance {
